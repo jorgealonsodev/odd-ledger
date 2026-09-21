@@ -66,7 +66,7 @@ production bundle, so this split is the convention rather than a deviation from 
 
 ## Tasks
 
-- [ ] T1 Bootstrap the project to Microsoft's extension layout
+- [x] T1 Bootstrap the project to Microsoft's extension layout
       The documented structure: `package.json` manifest with `engines.vscode`, `main`, and
       `activationEvents: []` (commands self-activate since 1.74); `tsconfig.json`;
       `src/extension.ts` exporting `activate`/`deactivate` with disposables pushed to
@@ -74,6 +74,20 @@ production bundle, so this split is the convention rather than a deviation from 
       Plus esbuild bundling with `vscode` marked external, `.vscode-test.mjs`, and both test
       layers wired with one smoke test each, observed failing then passing.
       Route: delegated writer (many files, but all already-understood scaffolding).
+      DONE `f99f508`, corrected by `9319d6d`, CI in `13ab521`.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 7/7 pass;
+      `npm run bundle` exit 0; `npm run test:extension` 1 passing; `dist/extension.js`
+      exports `activate` as a function; `grep` over `src/domain/` for a `vscode` import
+      returns clean. RED observed before each: `TS2307: Cannot find module
+      './feature-document'` for the domain layer, and an `AssertionError` on a
+      deliberately wrong extension id for the adapter layer.
+      Review: RDD assess over `8d2c859..f99f508` returned risk **medium**
+      (`slice_budget_reached`, an executable change in `.vscode-test.mjs`). Consent
+      granted by the user. Lineage `review-f49235a75681f569`, one lens
+      (`review-reliability`), one CRITICAL candidate-caused finding
+      (`R3-domain-suite-glob`), one bounded correction inside a 2-line budget,
+      targeted validation passed, **approved and acknowledged, authority burned**.
+      Six advisory findings were recorded as non-blocking; they are follow-up work.
 
 - [ ] T2 Discover feature documents
       Find `odd/tasks/*.md` in the workspace; handle a workspace with no `odd/`, with an
@@ -185,9 +199,28 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Nothing implemented. Document created 2026-09-21. No branch yet, no commits yet.
+Branch `feat/ledger-view-v1`, four commits. 1 of 16 tasks closed.
+
+| Commit | What |
+|--------|------|
+| `8d2c859` | PRD and this document |
+| `f99f508` | T1 scaffolding and the domain/adapter boundary |
+| `9319d6d` | T1 correction: domain test script no longer depends on shell glob support |
+| `13ab521` | CI on push and pull request; ignore `.codegraph/` |
+
+Running authored count: roughly 750 lines against a ~2,800 forecast. Chain strategy still
+unresolved; `ask-on-risk` will request it before the count crosses the budget.
+
+A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
+It is ignored by git, because an index is per-checkout and its root and indexed bytes
+differ between working trees.
+
+**Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
+in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
+cannot catch that class of regression. A version matrix is worth considering before v1
+ships.
 
 ## Next step
 
-T1: bootstrap the project on `feat/ledger-view-v1` following Microsoft's documented extension
-layout. The runner question is closed; no decision blocks the start.
+T2: discover feature documents. Route: delegated writer. RED first under `npm run
+test:domain`, which now runs `node --test` from inside the compiled domain directory.
