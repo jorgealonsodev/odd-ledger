@@ -177,10 +177,45 @@ production bundle, so this split is the convention rather than a deviation from 
       user. Lineage `review-da6037c677b0bc8c`, one lens (`review-reliability`).
       **Approved with zero blocking findings, acknowledged, authority burned.**
 
-- [ ] T5 Derive task and feature state
+- [x] T5 Derive task and feature state
       `done-unproven` (checked, no evidence, no commit reference), per-section and
       per-feature counts, completion ratio with `[~]` counted in the total and not as done.
       Route: delegated writer.
+      DONE `94071f7`.
+      `deriveChecklistState(sections)` returns per-item derived state, per-section counts
+      and a feature roll-up of done, total, percentage and unproven. `done-unproven` is
+      **additive, not a demotion**: the item still counts as done, and the extension says
+      what is missing rather than silently rewriting what its author recorded.
+      A commit reference is a 7-to-40 character hex run at word boundaries containing at
+      least one digit. The digit requirement matters because `a`–`f` spells English:
+      `deadbeef` is hex-shaped with no digit. A real object id derived from binary content
+      has under a tenth of a percent chance of avoiding digits entirely.
+      **Progress rule, decided on evidence.** A section counts when its kind is `tasks` or
+      unrecognized. Counting only `tasks` reported one real document as ten of ten complete
+      while five items sat open under a section its author named `Pending`; counting every
+      section reported this repository's own document as four of twenty-eight, because
+      eleven acceptance criteria became outstanding work. The chosen rule gives eighteen of
+      twenty-three and four of seventeen, both truthful. Excluded sections still render.
+      `declined` and `unknown` count in the total but not as done. A feature with no
+      countable items reports zero per cent, never `NaN`.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 82/82 pass (24 new);
+      `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode` import returns
+      clean. RED observed first: `TS2307: Cannot find module './derive-checklist-state'`.
+      The digit requirement was falsified against a deliberately broken implementation to
+      prove its test was not vacuous.
+      **Corpus verification, run by the parent.** Both known figures reproduce exactly:
+      document C gives 18/23, this repository's own document gives 4/17 with its eleven
+      acceptance criteria excluded. And the product demonstrated itself on real data —
+      **document B reports 7/7, one hundred per cent, with three of those seven tasks
+      recording neither evidence nor a commit.** That gap between marked and proven is the
+      reason this extension exists, and it showed up in a real document rather than a
+      fixture.
+      Review: RDD assess over `ba26aca..94071f7` returned risk **medium**
+      (`slice_budget_reached`, 605 lines). Consent granted by the user. Lineage
+      `review-95e2064abd84b83f`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.**
+      The review also caught a stale denominator in this document's own progress line,
+      corrected below.
 
 - [ ] T6 Build the synthetic fixture corpus
       Documents reproducing every grammar variant found in the survey, plus parser tests
@@ -278,7 +313,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, eleven commits. 4 of 16 tasks closed.
+Branch `feat/ledger-view-v1`, thirteen commits. 5 of 17 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -293,8 +328,13 @@ Branch `feat/ledger-view-v1`, eleven commits. 4 of 16 tasks closed.
 | `bcd4b71` | T3 recorded as closed |
 | `b21c2f0` | T4 checklist parser |
 | `ba26aca` | T4 fixtures sanitised of corpus excerpts |
+| `28dd155` | T4 recorded as closed, T17 raised |
+| `94071f7` | T5 derived state |
 
-Running authored count: roughly 2,200 lines against a ~2,800 forecast. Chain strategy still
+Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast is
+about to be met with twelve tasks still open, so it was low; the delivery budget, not the
+forecast, is what governs, and `ask-on-risk` will request a chain strategy before the next
+slice. Chain strategy still
 unresolved; `ask-on-risk` will request it before the count crosses the budget.
 
 A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
@@ -320,7 +360,7 @@ ships.
 
 ## Next step
 
-T5: derive task and feature state — `done-unproven`, per-section and per-feature counts,
-and the completion ratio with `[~]` counted in the total but not as done. It also owns the
-decision T4 deliberately left open: whether an `## Acceptance criteria` checklist counts
-toward progress. Route: delegated writer. RED first under `npm run test:domain`.
+T6: build the synthetic fixture corpus — documents reproducing every grammar variant the
+survey found, plus a local-only check that the five real documents parse, skipped when
+absent so the suite stays green on any other machine. Route: delegated writer. RED first
+under `npm run test:domain`.
