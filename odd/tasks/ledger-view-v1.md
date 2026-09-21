@@ -65,7 +65,9 @@ production bundle, so this split is the convention rather than a deviation from 
 count crossed the delivery budget. Each slice is its own pull request against `main`,
 resting on the one before it, reviewed and merged in order. The cost accepted with it: a
 change to an early slice during review means rebasing the ones stacked above.
-**Forecast**: roughly 2,800 authored changed lines including tests — well above one 400-line slice, so a chain strategy will be requested before the running count crosses the budget. Chain strategy: not yet resolved.
+**Forecast**: roughly 2,800 authored changed lines including tests. It was low: the count
+reached it with twelve tasks still open, so treat it as a planning figure that has now been
+overtaken. The delivery budget, not the forecast, is what governs slicing.
 **Running count**: see Progress.
 
 ### Slice boundaries
