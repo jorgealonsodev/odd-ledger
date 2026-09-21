@@ -1,0 +1,38 @@
+{
+  "name": "odd-ledger",
+  "displayName": "ODD Ledger",
+  "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
+  "version": "0.0.1",
+  "publisher": "jorgealonsodev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jorgealonsodev/odd-ledger.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {},
+  "scripts": {
+    "compile": "tsc -p ./",
+    "check-types": "tsc --noEmit -p ./",
+    "bundle": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "test:domain": "npm run compile && node --test --test-reporter=spec out/domain/**/*.test.js",
+    "test:extension": "npm run compile && npm run bundle && vscode-test",
+    "vscode:prepublish": "npm run check-types && npm run bundle -- --production"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.2",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}
