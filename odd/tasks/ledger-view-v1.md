@@ -283,12 +283,39 @@ user's decisions under ordinary repository policy.
       `review-50e3331e6a0cba89`, one lens (`review-reliability`).
       **Approved with zero blocking findings, acknowledged, authority burned.**
 
-- [ ] T7 Register the activity bar container, the view, and the welcome content
+- [~] T7 Register the activity bar container, the view, and the welcome content
       `contributes.viewsContainers.activitybar` with id, title and a **24x24 SVG icon**, then
       `contributes.views` under that container id, and a `TreeDataProvider`. The empty state
       uses `contributes.viewsWelcome`, the documented mechanism for a tree view with no
       children — not a hand-rolled placeholder node.
       Route: delegated writer (manifest, icon asset, provider, tests).
+      IMPLEMENTED `ee74937`. **Left open on purpose: its review is due and awaits the
+      user's consent**, which is theirs to give and was not given in their absence. The
+      checkbox stays `[~]` rather than `[x]` until that review reaches a terminal outcome,
+      because this document must not claim a completion its own rules have not granted.
+      First adapter-layer work: the first code allowed to import `vscode`, and the first
+      tested by launching a real extension host. Uses `window.createTreeView` rather than
+      `registerTreeDataProvider`, because the unproven badge lives on the `TreeView`
+      instance, and implements `getParent` although nothing nests yet, because `reveal`
+      requires it and T9 needs `reveal`. The empty case uses `contributes.viewsWelcome`
+      rather than a placeholder node pretending to be data.
+      A window with no workspace folder and a folder with no `odd/tasks/` are
+      indistinguishable from the view's side and both land on the same welcome content.
+      Several folders are all scanned into one flat alphabetical list; there is no
+      per-folder grouping level because the interface has none.
+      The adapter suite splits into two `@vscode/test-cli` profiles, one with no workspace
+      folder and one against a fixture workspace, with disjoint globs so nothing runs twice.
+      Evidence: `npm run check-types` clean; `npm run test:domain` unchanged at 87 pass
+      with the optional check skipped; `npm run test:extension` 12 passing, exit 0;
+      `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode` import returns
+      clean. RED observed first as a compile failure on the missing provider module. The
+      counts assertion was falsified against a deliberately broken reader — it failed with
+      `0/0 !== 2/3` — then reverted and confirmed byte-identical.
+      Privacy verified by the parent over `src/adapter/`, `resources/`, the manifest and
+      the test configuration: clean.
+      Review: RDD assess over `d9a3979..ee74937` returned risk **medium**
+      (`slice_budget_reached`, 492 lines). **Consent not requested — the user was away, and
+      consent is theirs to give.** No lineage was opened.
 
 - [ ] T8 Tree view: features, sections, tasks
       State icons, ID as written, `done/total`, the unproven badge, the branch when named,
@@ -372,7 +399,8 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, seventeen commits. 6 of 17 tasks closed.
+Branch `feat/ledger-view-v1`, nineteen commits. 6 of 17 tasks closed, one implemented
+and awaiting its review.
 
 | Commit | What |
 |--------|------|
@@ -392,6 +420,8 @@ Branch `feat/ledger-view-v1`, seventeen commits. 6 of 17 tasks closed.
 | `01d3033` | T5 recorded as closed |
 | `a02f5af`, `…` | Chain strategy and slice boundaries recorded |
 | `d9a3979` | T6 synthetic corpus and full-pipeline tests |
+| `288eea6` | Corpus excerpts the first anonymisation pass missed, removed |
+| `ee74937` | T7 activity bar container, view and welcome content |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast is
 about to be met with twelve tasks still open, so it was low; the delivery budget, not the
@@ -422,9 +452,15 @@ ships.
 
 ## Next step
 
-T7: register the activity bar container, the view and the welcome content. This is the
-**first adapter-layer task** — the first code allowed to import `vscode`, and the first
-tested with `@vscode/test-cli` rather than `node --test`. Use
-`window.createTreeView` rather than `registerTreeDataProvider`, because the unproven badge
-lives on the `TreeView` instance, and implement `getParent`, which the `reveal` API
-requires. Route: delegated writer.
+Two things wait on the repository owner, in this order.
+
+**1. Decide what to do about the corpus excerpts in the root commit, then push.** Nothing
+has ever been published: the public remote is still empty. The working tree is clean, but
+`8d2c859` carries a task title and two short commit hashes taken from a surveyed document,
+and `dd6fd03` carries one verbatim heading. Either push as it stands, or rewrite the branch
+first — which would invalidate every commit hash this document records as evidence.
+
+**2. Grant or decline the review of T7**, which is due at medium risk and was not requested
+in the owner's absence.
+
+Then T8: the tree view's feature, section and task nodes.
