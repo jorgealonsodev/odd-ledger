@@ -1,11 +1,25 @@
 import * as vscode from 'vscode';
+import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
 
 export function activate(context: vscode.ExtensionContext): void {
-  // Providers, commands and the detail panel register here in later tasks.
-  // Every disposable they create must be pushed to context.subscriptions.
-  void context;
+  const provider = new FeatureTreeDataProvider();
+
+  // window.createTreeView, not window.registerTreeDataProvider: the
+  // reveal API T9 needs is only exposed on the returned TreeView, not on
+  // the provider itself.
+  const treeView = vscode.window.createTreeView('oddLedger.features', {
+    treeDataProvider: provider,
+  });
+  context.subscriptions.push(treeView);
+
+  const refreshCommand = vscode.commands.registerCommand('oddLedger.refresh', () => {
+    provider.refresh();
+  });
+  context.subscriptions.push(refreshCommand);
 }
 
 export function deactivate(): void {
-  // Nothing to tear down yet.
+  // Everything activate() created (the tree view, the refresh command) is
+  // a disposable pushed to context.subscriptions, so VS Code tears it down
+  // on its own. Nothing else was allocated, so there is nothing to do here.
 }

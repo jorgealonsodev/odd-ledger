@@ -10,4 +10,13 @@ suite('Extension activation', () => {
 
     assert.equal(extension!.isActive, true);
   });
+
+  test('registers the refresh command', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('oddLedger.refresh'), 'oddLedger.refresh was not registered');
+  });
 });

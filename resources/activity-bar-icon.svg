@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!--
+    ODD Ledger activity bar icon: a clipboard holding a checklist. VS Code
+    tints activity bar icons by theme rather than showing their colours —
+    it treats the icon as an alpha silhouette — so this is drawn as flat
+    solid black shapes on a transparent background with no gradients, no
+    strokes, and no colour meaning. Whatever tint the active theme applies,
+    the silhouette (clipboard outline, clip tab, two checkmarks, two task
+    lines) still reads clearly at 24x24 and at the small rendered size the
+    activity bar actually uses.
+  -->
+  <path fill="#000000" fill-rule="evenodd" clip-rule="evenodd" d="
+    M9.25 2A1.25 1.25 0 0 0 8 3.25V4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2v-.75A1.25 1.25 0 0 0 14.75 2h-5.5ZM9.5 4h5v1h-5V4ZM6 6.5h1V7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-.5h1V20H6V6.5Z
+  "/>
+  <path fill="#000000" d="M7.4 12.1 6.3 13.2l2.1 2.1 4.2-4.2-1.1-1.1-3.1 3.1-0.9-0.9Z"/>
+  <rect x="13.2" y="11.3" width="4" height="1.5" fill="#000000"/>
+  <path fill="#000000" d="M7.4 17.1 6.3 18.2l2.1 2.1 4.2-4.2-1.1-1.1-3.1 3.1-0.9-0.9Z"/>
+  <rect x="13.2" y="16.3" width="4" height="1.5" fill="#000000"/>
+</svg>

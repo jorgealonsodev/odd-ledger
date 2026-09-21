@@ -16,7 +16,48 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
-  "contributes": {},
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "oddLedger",
+          "title": "ODD Ledger",
+          "icon": "resources/activity-bar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "oddLedger": [
+        {
+          "id": "oddLedger.features",
+          "name": "Features"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "oddLedger.features",
+        "contents": "This workspace has no odd/tasks/ folder, so there are no ODD features to show."
+      }
+    ],
+    "commands": [
+      {
+        "command": "oddLedger.refresh",
+        "title": "Refresh",
+        "category": "ODD Ledger",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "oddLedger.refresh",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
   "scripts": {
     "compile": "tsc -p ./",
     "check-types": "tsc --noEmit -p ./",
