@@ -89,10 +89,30 @@ production bundle, so this split is the convention rather than a deviation from 
       targeted validation passed, **approved and acknowledged, authority burned**.
       Six advisory findings were recorded as non-blocking; they are follow-up work.
 
-- [ ] T2 Discover feature documents
+- [x] T2 Discover feature documents
       Find `odd/tasks/*.md` in the workspace; handle a workspace with no `odd/`, with an
       empty `tasks/`, and with more than one feature file.
       Route: delegated writer (source + tests).
+      DONE `b306dca`.
+      `discoverFeatureDocuments(root)` returns `{ path, featureName }` per document,
+      sorted by feature name because directory read order is OS-dependent and the tree
+      must not reshuffle between refreshes. Nothing throws: a missing root, a missing
+      `odd/`, a missing or empty `tasks/`, and an unreadable directory all return an
+      empty result, because a project without ODD is the common case and must render
+      welcome content. Nesting is excluded twice over — the read is non-recursive and
+      every candidate is still checked against `isFeatureDocumentPath`.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 17/17 pass (10 new
+      against real temporary directories, 7 from T1); `npm run bundle` exit 0; `grep`
+      over `src/domain/` for a `vscode` import returns clean. RED observed first:
+      `TS2307: Cannot find module './discover-feature-documents'`.
+      Review: RDD assess over `9319d6d..b306dca` returned risk **high**
+      (`shell_source` in `.github/workflows/ci.yml` — the CI, not this code). Consent
+      granted by the user. Lineage `review-d8e7ccbcac0bf0ae`, four lenses run
+      concurrently. The resilience lens failed once on a model-provider safeguard
+      false positive; STATUS reoffered the same slot and the relaunch was admitted.
+      **Approved with zero blocking findings, acknowledged, authority burned.**
+      Advisory findings recorded as follow-up work, including unpinned GitHub action
+      refs and default token permissions in CI.
 
 - [ ] T3 Parse document structure
       H1, the four headings present in every document, and the optional ones through an
@@ -199,7 +219,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, four commits. 1 of 16 tasks closed.
+Branch `feat/ledger-view-v1`, six commits. 2 of 16 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -207,8 +227,10 @@ Branch `feat/ledger-view-v1`, four commits. 1 of 16 tasks closed.
 | `f99f508` | T1 scaffolding and the domain/adapter boundary |
 | `9319d6d` | T1 correction: domain test script no longer depends on shell glob support |
 | `13ab521` | CI on push and pull request; ignore `.codegraph/` |
+| `7c7dfd7` | T1 recorded as closed |
+| `b306dca` | T2 feature document discovery |
 
-Running authored count: roughly 750 lines against a ~2,800 forecast. Chain strategy still
+Running authored count: roughly 990 lines against a ~2,800 forecast. Chain strategy still
 unresolved; `ask-on-risk` will request it before the count crosses the budget.
 
 A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
@@ -222,5 +244,6 @@ ships.
 
 ## Next step
 
-T2: discover feature documents. Route: delegated writer. RED first under `npm run
-test:domain`, which now runs `node --test` from inside the compiled domain directory.
+T3: parse document structure — H1 plus the four headings present in every document,
+and the optional ones through an alias table. Route: delegated writer. RED first under
+`npm run test:domain`.
