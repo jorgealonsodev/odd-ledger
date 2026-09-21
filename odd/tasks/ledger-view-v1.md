@@ -114,11 +114,32 @@ production bundle, so this split is the convention rather than a deviation from 
       Advisory findings recorded as follow-up work, including unpinned GitHub action
       refs and default token permissions in CI.
 
-- [ ] T3 Parse document structure
+- [x] T3 Parse document structure
       H1, the four headings present in every document, and the optional ones through an
       alias table (`Progress` / `Progress notes`, `Constraints` / `Checks`, decision and
       findings narratives). An unrecognized heading is preserved, never dropped.
       Route: delegated writer.
+      DONE `dd6fd03`.
+      `parseDocumentStructure(text)` returns the H1 title, the preamble before the first
+      section, and one entry per section with raw heading, canonical kind, body and line
+      numbers. Only level-2 headings open a section: the corpus records no subsection
+      convention, and promoting an incidental `###` would shred evidence prose into tree
+      nodes nothing asks for. A `#` inside a fenced code block is not a heading.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 38/38 pass (21 new);
+      `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode` import returns
+      clean. RED observed first: `TS2307: Cannot find module './parse-document-structure'`.
+      **Corpus verification, run by the parent against the five real documents in place**
+      (never copied into this repository): all five parse without throwing, all five yield
+      an H1 and the four sections every document carries, and section counts match the
+      survey exactly — 11, 10, 9, 8, 8. The first run exposed three alias gaps the writer's
+      own fixtures could not see, because those fixtures came from the task brief rather
+      than from reality: `Decision` in the singular, `Delivery`, and `Why` / `Why now`.
+      Sent back and closed under TDD; documents A and B now resolve every heading, and what
+      stays unrecognized is prose specific to one document, exactly as intended.
+      Review: RDD assess over `b306dca..dd6fd03` returned risk **medium**
+      (`slice_budget_reached`, 592 lines). Consent granted by the user. Lineage
+      `review-4406b7ab90d13a77`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.**
 
 - [ ] T4 Parse the checklist
       Heading-scoped sections; the first token after the marker as the task ID without
@@ -219,7 +240,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, six commits. 2 of 16 tasks closed.
+Branch `feat/ledger-view-v1`, eight commits. 3 of 16 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -229,13 +250,22 @@ Branch `feat/ledger-view-v1`, six commits. 2 of 16 tasks closed.
 | `13ab521` | CI on push and pull request; ignore `.codegraph/` |
 | `7c7dfd7` | T1 recorded as closed |
 | `b306dca` | T2 feature document discovery |
+| `01ea0c1` | T2 recorded as closed |
+| `dd6fd03` | T3 document structure parser |
 
-Running authored count: roughly 990 lines against a ~2,800 forecast. Chain strategy still
+Running authored count: roughly 1,550 lines against a ~2,800 forecast. Chain strategy still
 unresolved; `ask-on-risk` will request it before the count crosses the budget.
 
 A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
 It is ignored by git, because an index is per-checkout and its root and indexed bytes
 differ between working trees.
+
+**Advisory findings carried forward, not yet tasks.** None blocked any review; each is
+separate later work. Three are worth naming because they describe real inputs the parser
+could meet: an **unterminated code fence** would swallow the rest of a document; an `#`
+H1 appearing *after* the first section is currently dropped; and `endLine` is off for a
+document ending without a trailing newline. From earlier reviews: CI uses unpinned GitHub
+action refs and default token permissions.
 
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
@@ -244,6 +274,7 @@ ships.
 
 ## Next step
 
-T3: parse document structure — H1 plus the four headings present in every document,
-and the optional ones through an alias table. Route: delegated writer. RED first under
+T4: parse the checklist — heading-scoped sections, the first token after the marker as
+the task ID without requiring `T<n>`, states `[ ]`, `[x]`, `[~]` and unknown, and the
+evidence prose under each item. Route: delegated writer. RED first under
 `npm run test:domain`.
