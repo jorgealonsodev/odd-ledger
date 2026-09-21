@@ -259,12 +259,12 @@ test('parses correctly with CRLF line endings', () => {
 });
 
 test('matches the singular "Decision" heading, with its parenthetical, as decision-narrative', () => {
-  const text = '# p-doc\n\n## Decision (user-owned, confirmed 2026-09-21)\nWe decided.';
+  const text = '# p-doc\n\n## Decision (owner approved, 2026-01-15)\nWe decided.';
 
   const result = parseDocumentStructure(text);
 
   assert.equal(result.sections[0].kind, 'decision-narrative');
-  assert.equal(result.sections[0].heading, 'Decision (user-owned, confirmed 2026-09-21)');
+  assert.equal(result.sections[0].heading, 'Decision (owner approved, 2026-01-15)');
 });
 
 test('matches "Delivery" as its own canonical kind', () => {
