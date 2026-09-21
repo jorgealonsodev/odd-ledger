@@ -61,8 +61,28 @@ production bundle, so this split is the convention rather than a deviation from 
 ## Delivery
 
 **Strategy**: `ask-on-risk` (default).
+**Chain strategy**: `stacked-to-main`, chosen by the user on 2026-09-21 once the running
+count crossed the delivery budget. Each slice is its own pull request against `main`,
+resting on the one before it, reviewed and merged in order. The cost accepted with it: a
+change to an early slice during review means rebasing the ones stacked above.
 **Forecast**: roughly 2,800 authored changed lines including tests — well above one 400-line slice, so a chain strategy will be requested before the running count crosses the budget. Chain strategy: not yet resolved.
-**Running count**: 0.
+**Running count**: see Progress.
+
+### Slice boundaries
+
+Nothing is pushed yet and no pull request exists. These are the intended boundaries, each
+a coherent piece of behaviour rather than an arbitrary line count.
+
+| Slice | Commits | Holds |
+|-------|---------|-------|
+| 1 | `8d2c859` … `7c7dfd7` | Specification, ODD ledger, project scaffolding, the domain/adapter boundary, CI |
+| 2 | `b306dca` … `bcd4b71` | Document discovery and the structure parser |
+| 3 | `b21c2f0` … `01d3033` | The checklist parser and derived state, including `done-unproven` |
+| 4 | from `T6` onward | Fixture corpus, then the adapter layer |
+
+Each slice already carries its own acknowledged review receipt, so the reviews are not
+repeated at pull-request time. Pushing, opening pull requests and merging remain the
+user's decisions under ordinary repository policy.
 
 ## Tasks
 
