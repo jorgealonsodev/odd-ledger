@@ -141,11 +141,41 @@ production bundle, so this split is the convention rather than a deviation from 
       `review-4406b7ab90d13a77`, one lens (`review-reliability`).
       **Approved with zero blocking findings, acknowledged, authority burned.**
 
-- [ ] T4 Parse the checklist
+- [x] T4 Parse the checklist
       Heading-scoped sections; the first token after the marker as the task ID without
       requiring `T<n>`; states `[ ]`, `[x]`, `[~]`, and `unknown` for anything else;
       evidence prose under each item.
       Route: delegated writer.
+      DONE `b21c2f0`, with fixtures sanitised in `ba26aca`.
+      `parseChecklist(text, sections)` returns one group per section with its heading,
+      kind and items; an item carries state, ID or null, title, evidence, raw text and
+      line numbers. An ID is recognised by **shape, not position**: alphanumeric
+      segments joined by a dot or dash containing at least one digit, so `T1`, `P3`,
+      `RF-12` and `4.1` qualify and prose does not. Taking the first token would have
+      read `A` and `The` as identifiers in acceptance-criteria checklists. No prefix is
+      hardcoded. Sections are deliberately not classified — that is T5.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 58/58 pass (25 new);
+      `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode` import returns
+      clean. RED observed first: `TS2307: Cannot find module './parse-checklist'`. Where
+      a later test passed on its first run, the writer falsified it against a
+      deliberately broken implementation to prove it was not vacuous, rather than
+      inventing a RED phase.
+      **Corpus verification, run by the parent against the five real documents plus this
+      repository's own feature document.** Every checklist parses. It also corrected the
+      original survey: in document C, `T12..T16` live under `## Pending`, not `## Tasks`,
+      so one section carries **two ID prefixes at once** — `P*` and `T*` together — and
+      `T11` does not exist at all. This repository's own document returns 16 task items
+      with IDs and 11 acceptance criteria with **no** ID, which is the shape rule working
+      exactly as intended.
+      **Privacy correction.** The task brief quoted real corpus lines verbatim as
+      examples and they became fixtures, against this document's own constraint. Caught
+      by the parent during review, before any push. Every fixture now uses invented text
+      exercising the same shapes; `src/` greps clean. Removing the string `exec.path`
+      also dropped a heuristic false positive that had rated the candidate high risk.
+      Review: RDD assess over `dd6fd03..ba26aca` returned risk **medium**
+      (`slice_budget_reached`, 675 lines) after the correction. Consent granted by the
+      user. Lineage `review-da6037c677b0bc8c`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.**
 
 - [ ] T5 Derive task and feature state
       `done-unproven` (checked, no evidence, no commit reference), per-section and
@@ -213,6 +243,14 @@ production bundle, so this split is the convention rather than a deviation from 
       Extension packaging, README, and the settings reference.
       Route: delegated writer.
 
+- [ ] T17 Survive a malformed document
+      An unterminated code fence currently swallows the rest of a document in both the
+      structure parser and the checklist parser. Raised as an advisory finding by two
+      consecutive independent reviews, which is why it is a task rather than a note.
+      Also covers an H1 appearing after the first section, currently dropped, and
+      `endLine` drifting for a document with no trailing newline.
+      Route: delegated writer.
+
 ## Acceptance criteria
 
 Inherited from `docs/PRD.md`, verified against the five real documents locally and the
@@ -240,7 +278,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, eight commits. 3 of 16 tasks closed.
+Branch `feat/ledger-view-v1`, eleven commits. 4 of 16 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -252,13 +290,21 @@ Branch `feat/ledger-view-v1`, eight commits. 3 of 16 tasks closed.
 | `b306dca` | T2 feature document discovery |
 | `01ea0c1` | T2 recorded as closed |
 | `dd6fd03` | T3 document structure parser |
+| `bcd4b71` | T3 recorded as closed |
+| `b21c2f0` | T4 checklist parser |
+| `ba26aca` | T4 fixtures sanitised of corpus excerpts |
 
-Running authored count: roughly 1,550 lines against a ~2,800 forecast. Chain strategy still
+Running authored count: roughly 2,200 lines against a ~2,800 forecast. Chain strategy still
 unresolved; `ask-on-risk` will request it before the count crosses the budget.
 
 A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
 It is ignored by git, because an index is per-checkout and its root and indexed bytes
 differ between working trees.
+
+**An unterminated code fence has now been raised as a blocking-grade advisory by two
+consecutive reviews**, against the structure parser and again against the checklist
+parser. A malformed document would swallow the rest of itself in both. Two independent
+reports on the same input class make this a task, not a note, and it is added as T17.
 
 **Advisory findings carried forward, not yet tasks.** None blocked any review; each is
 separate later work. Three are worth naming because they describe real inputs the parser
@@ -274,7 +320,7 @@ ships.
 
 ## Next step
 
-T4: parse the checklist — heading-scoped sections, the first token after the marker as
-the task ID without requiring `T<n>`, states `[ ]`, `[x]`, `[~]` and unknown, and the
-evidence prose under each item. Route: delegated writer. RED first under
-`npm run test:domain`.
+T5: derive task and feature state — `done-unproven`, per-section and per-feature counts,
+and the completion ratio with `[~]` counted in the total but not as done. It also owns the
+decision T4 deliberately left open: whether an `## Acceptance criteria` checklist counts
+toward progress. Route: delegated writer. RED first under `npm run test:domain`.
