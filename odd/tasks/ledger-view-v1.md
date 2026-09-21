@@ -239,12 +239,48 @@ user's decisions under ordinary repository policy.
       The review also caught a stale denominator in this document's own progress line,
       corrected below.
 
-- [ ] T6 Build the synthetic fixture corpus
+- [x] T6 Build the synthetic fixture corpus
       Documents reproducing every grammar variant found in the survey, plus parser tests
       over them under `node --test`. No real project content. Also a local-only check that
-      the five real documents parse, reading them from their absolute paths, skipped when
-      absent so the suite stays green on any other machine.
+      the five real documents parse, skipped when absent so the suite stays green on any
+      other machine.
+      **Corrected while implementing**: this task originally said the check would read the
+      real documents "from their absolute paths". That contradicted this document's own
+      constraint that no real path enters the repository. The location now comes from the
+      environment variable `ODD_LEDGER_REAL_CORPUS_DIR`, and nothing is written inside the
+      repository, so there is no path left behind to leak.
       Route: delegated writer.
+      DONE `d9a3979`.
+      Four invented documents covering every surveyed variant between them: a bold
+      metadata block in one and not the others, heading name variants, a decision
+      narrative with a trailing parenthetical, two ID namespaces under two headings, a
+      single section carrying two prefixes at once with a gap in the numbering, all three
+      checkbox states plus an unrecognised marker, a fenced block hiding a fake heading
+      and a fake item, an acceptance-criteria checklist with no IDs, and one deliberately
+      sparse document.
+      These are the **first tests of the three parsers composed**. Until now each was
+      exercised alone; nothing ran structure, checklist and derivation over one whole
+      document and checked the numbers at the far end. Expected values are written by
+      hand, not recomputed by the code under test.
+      Fixtures are TypeScript modules rather than `.md` assets, because the domain suite
+      runs from the compiled output directory and a Markdown file beside it would need a
+      copy step this build does not have. Verified absent from the production bundle.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 87 pass with the
+      optional check skipped; with `ODD_LEDGER_REAL_CORPUS_DIR` pointed at the five real
+      documents, **88 pass and none skipped**, so both directions of the opt-in are
+      proven; `npm run bundle` exit 0 and `grep` for the fixtures in `dist/` returns 0.
+      Every assertion passed on its first run, so rather than invent a RED phase the
+      writer falsified them against a deliberately broken derivation — nine tests failed,
+      four of them the new ones — then reverted and confirmed byte-identical.
+      **Privacy verified by the parent**: a grep across `src/` and `README.md` for every
+      real project name, document name, identifier, commit hash, absolute path and home
+      directory returns clean. This was the task where the T4 mistake would have done the
+      most damage, so it was checked before the commit rather than after.
+      **No parser defect found.** Every hand-computed figure matched the parsers exactly.
+      Review: RDD assess over `01d3033..d9a3979` returned risk **medium**
+      (`slice_budget_reached`, 749 lines). Consent granted by the user. Lineage
+      `review-50e3331e6a0cba89`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.**
 
 - [ ] T7 Register the activity bar container, the view, and the welcome content
       `contributes.viewsContainers.activitybar` with id, title and a **24x24 SVG icon**, then
@@ -335,7 +371,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, thirteen commits. 5 of 17 tasks closed.
+Branch `feat/ledger-view-v1`, seventeen commits. 6 of 17 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -352,6 +388,9 @@ Branch `feat/ledger-view-v1`, thirteen commits. 5 of 17 tasks closed.
 | `ba26aca` | T4 fixtures sanitised of corpus excerpts |
 | `28dd155` | T4 recorded as closed, T17 raised |
 | `94071f7` | T5 derived state |
+| `01d3033` | T5 recorded as closed |
+| `a02f5af`, `…` | Chain strategy and slice boundaries recorded |
+| `d9a3979` | T6 synthetic corpus and full-pipeline tests |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast is
 about to be met with twelve tasks still open, so it was low; the delivery budget, not the
@@ -382,7 +421,9 @@ ships.
 
 ## Next step
 
-T6: build the synthetic fixture corpus — documents reproducing every grammar variant the
-survey found, plus a local-only check that the five real documents parse, skipped when
-absent so the suite stays green on any other machine. Route: delegated writer. RED first
-under `npm run test:domain`.
+T7: register the activity bar container, the view and the welcome content. This is the
+**first adapter-layer task** — the first code allowed to import `vscode`, and the first
+tested with `@vscode/test-cli` rather than `node --test`. Use
+`window.createTreeView` rather than `registerTreeDataProvider`, because the unproven badge
+lives on the `TreeView` instance, and implement `getParent`, which the `reveal` API
+requires. Route: delegated writer.
