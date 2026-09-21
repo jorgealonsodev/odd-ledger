@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run check-types
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Domain tests (node --test)
+        run: npm run test:domain
+
+      - name: Bundle
+        run: npm run bundle
+
+      - name: Extension tests (@vscode/test-cli, headless)
+        run: xvfb-run -a npm run test:extension
