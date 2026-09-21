@@ -128,9 +128,9 @@ ODD LEDGER                                   [⟳] [▽] [···]
 
   ▾ ☰ rate-limit-hardening        7/10  ⚠1   feat/rate-…
     ▾ Tasks
-        ☑ T1  Pin the policy exec.path test to the real constant
-                aad40aa
-        ☑ T2  Reuse the release checklist in the packaging script
+        ☑ T1  Pin the retry ceiling to its single source
+                4b7c1e9
+        ☑ T2  Reuse the warm-up list in the scheduler
                 9c1f204
         ⚠ T6  Document the signing step
                 checked, no evidence recorded
@@ -176,8 +176,8 @@ Ordered by what ODD makes actionable: what to do next, what is not yet proven, t
 │ <objective and problem, rendered from the document>     │
 │                                                         │
 │ Tasks                                                   │
-│ ☑ T1  Pin the policy exec.path test…                    │
-│       DONE aad40aa                                      │
+│ ☑ T1  Pin the retry ceiling to its source…              │
+│       DONE 4b7c1e9                                      │
 │ ⚠ T6  Document the signing step                         │
 │       Checked, but the item records no evidence and no  │
 │       commit. ODD treats a checkbox as no proof at all. │

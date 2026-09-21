@@ -192,8 +192,9 @@ user's decisions under ordinary repository policy.
       **Privacy correction.** The task brief quoted real corpus lines verbatim as
       examples and they became fixtures, against this document's own constraint. Caught
       by the parent during review, before any push. Every fixture now uses invented text
-      exercising the same shapes; `src/` greps clean. Removing the string `exec.path`
-      also dropped a heuristic false positive that had rated the candidate high risk.
+      exercising the same shapes; `src/` greps clean. One of the removed strings had also
+      tripped a heuristic into rating the candidate high risk, so the sanitation dropped
+      a false positive as well.
       Review: RDD assess over `dd6fd03..ba26aca` returned risk **medium**
       (`slice_budget_reached`, 675 lines) after the correction. Consent granted by the
       user. Lineage `review-da6037c677b0bc8c`, one lens (`review-reliability`).
