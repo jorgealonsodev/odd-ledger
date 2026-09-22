@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { FeatureDetailPanel } from './adapter/feature-detail-panel';
 import type { FeatureNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
+import { fetchDocumentRevisions } from './domain/fetch-git-revisions';
+import { buildHistory, mostRecentWorkDate } from './domain/build-history';
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new FeatureTreeDataProvider();
@@ -37,7 +39,14 @@ export function activate(context: vscode.ExtensionContext): void {
     // directory keeps this from throwing if the folder cannot be
     // resolved; the relative path then degrades to just the filename.
     const workspaceRoot = vscode.workspace.getWorkspaceFolder(documentUri)?.uri.fsPath ?? dirname(node.model.documentPath);
-    detailPanel.show(node.model, workspaceRoot);
+    // T13: git-derived history. workspaceRoot is passed as git's own -C
+    // directory and node.model.documentPath as a separate argument, so
+    // this is the same resolution the subtitle's path already uses, never
+    // a second, independent guess at where the repository lives.
+    const revisions = fetchDocumentRevisions(workspaceRoot, node.model.documentPath);
+    const history = buildHistory(revisions);
+    const lastWork = mostRecentWorkDate(history);
+    detailPanel.show(node.model, workspaceRoot, lastWork, history);
   });
   context.subscriptions.push(openFeatureCommand);
 

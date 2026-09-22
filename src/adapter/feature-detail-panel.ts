@@ -10,8 +10,11 @@
  *
  * The "Recorded by this document" table (T12) renders the rare contract
  * fields (TDD, delivery, route, line budget, review), each its value or
- * "not recorded". Git-derived history (T13) and theming/layout polish
- * (T14) are still later work.
+ * "not recorded". The History region (T13) renders last: a sentence
+ * stating the git revision count and date range by default, and an inline
+ * SVG chart of the completion ratio recomputed per revision once there are
+ * enough revisions to plot meaningfully. Theming/layout polish (T14) is
+ * still later work.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -24,6 +27,8 @@ import type { PanelBody, PanelBodyDocumentSection } from '../domain/build-panel-
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
 import { buildRecordedFields } from '../domain/build-recorded-fields';
 import type { RecordedField } from '../domain/build-recorded-fields';
+import { UNAVAILABLE_HISTORY, HISTORY_CHART_CAPTION } from '../domain/build-history';
+import type { FeatureHistory, HistoryPoint } from '../domain/build-history';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
@@ -191,6 +196,69 @@ function renderRecordedByDocument(fields: readonly RecordedField[]): string {
     <table class="recorded-table"><tbody>${rows}</tbody></table>`;
 }
 
+/** The chart's internal coordinate space (an SVG `viewBox`, not pixels):
+ * points are laid out in relative units and the CSS below sizes the
+ * rendered element, so nothing here fixes an actual pixel width or
+ * height. */
+const CHART_VIEWBOX_WIDTH = 100;
+const CHART_VIEWBOX_HEIGHT = 40;
+
+/** One point's position inside the chart's viewBox: evenly spaced along
+ * the x axis by revision order (T13's chosen axis is revision time, not
+ * elapsed calendar time — see HISTORY_CHART_CAPTION), and the completion
+ * percentage along the y axis, inverted because SVG y grows downward. */
+function chartCoordinates(points: readonly HistoryPoint[]): Array<{ x: number; y: number }> {
+  const stepX = points.length > 1 ? CHART_VIEWBOX_WIDTH / (points.length - 1) : 0;
+  return points.map((point, index) => ({
+    x: points.length > 1 ? index * stepX : CHART_VIEWBOX_WIDTH / 2,
+    y: CHART_VIEWBOX_HEIGHT - (point.percentage / 100) * CHART_VIEWBOX_HEIGHT,
+  }));
+}
+
+/**
+ * The History region's chart (T13): inline SVG, no script and no external
+ * asset, sized in relative units by the `.history-chart` CSS rule below
+ * rather than a fixed pixel width or height here, and coloured only with
+ * `--vscode-*` variables so it reads correctly in light, dark and
+ * high-contrast themes. Each point carries a native SVG `<title>` (a
+ * static element, not a script) so hovering a point shows its exact date
+ * and percentage.
+ */
+function renderHistoryChart(points: readonly HistoryPoint[]): string {
+  const coordinates = chartCoordinates(points);
+  const polylinePoints = coordinates.map((c) => `${c.x.toFixed(2)},${c.y.toFixed(2)}`).join(' ');
+  const circles = points
+    .map((point, index) => {
+      const { x, y } = coordinates[index];
+      const label = escapeHtml(`${point.date} · ${point.percentage}%`);
+      return `<circle class="history-point" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="1.6"><title>${label}</title></circle>`;
+    })
+    .join('');
+  const ariaLabel = escapeHtml(`Completion percentage across ${points.length} git revisions`);
+  return `
+    <svg class="history-chart" viewBox="0 0 ${CHART_VIEWBOX_WIDTH} ${CHART_VIEWBOX_HEIGHT}" preserveAspectRatio="none" role="img" aria-label="${ariaLabel}">
+      <polyline class="history-line" points="${polylinePoints}" />
+      ${circles}
+    </svg>`;
+}
+
+/**
+ * The History region (T13): a sentence stating the revision count and
+ * date range by default (buildHistory's summary, already stating
+ * unavailability in words when there is no usable git history), and a
+ * chart — with its own caption naming what the axis means — only once
+ * buildHistory decided there are enough revisions to plot meaningfully.
+ */
+function renderHistory(history: FeatureHistory): string {
+  const chart = history.showChart
+    ? `${renderHistoryChart(history.points)}<p class="history-caption">${escapeHtml(HISTORY_CHART_CAPTION)}</p>`
+    : '';
+  return `
+    <h2>History</h2>
+    <p class="history-summary">${escapeHtml(history.summary)}</p>
+    ${chart}`;
+}
+
 /**
  * Renders the panel's full HTML document. Styles only against VS Code's
  * injected `--vscode-*` CSS variables and the `body.vscode-light`,
@@ -201,7 +269,12 @@ function renderRecordedByDocument(fields: readonly RecordedField[]): string {
  * read-only render with nothing to script, so the CSP has no `script-src`
  * exception at all and `default-src 'none'` blocks scripts outright.
  */
-function renderHtml(header: PanelHeader, body: PanelBody, recordedFields: readonly RecordedField[]): string {
+function renderHtml(
+  header: PanelHeader,
+  body: PanelBody,
+  recordedFields: readonly RecordedField[],
+  history: FeatureHistory,
+): string {
   const nonce = createNonce();
   const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
 
@@ -328,6 +401,32 @@ function renderHtml(header: PanelHeader, body: PanelBody, recordedFields: readon
   body.vscode-high-contrast .recorded-table td {
     border-top: 1px solid var(--vscode-panel-border);
   }
+  .history-summary {
+    margin: 0;
+  }
+  .history-chart {
+    display: block;
+    width: 100%;
+    height: 6em;
+    margin: 12px 0 4px;
+  }
+  .history-line {
+    fill: none;
+    stroke: var(--vscode-textLink-foreground);
+    stroke-width: 1.2;
+    vector-effect: non-scaling-stroke;
+  }
+  .history-point {
+    fill: var(--vscode-textLink-foreground);
+  }
+  .history-caption {
+    margin: 0;
+    font-size: 0.8em;
+    color: var(--vscode-descriptionForeground);
+  }
+  body.vscode-high-contrast .history-line {
+    stroke-width: 2;
+  }
 </style>
 </head>
 <body>
@@ -338,6 +437,7 @@ function renderHtml(header: PanelHeader, body: PanelBody, recordedFields: readon
   <hr>
   <div id="panel-body">${renderPanelBody(body)}</div>
   <div id="recorded-by-document">${renderRecordedByDocument(recordedFields)}</div>
+  <div id="history">${renderHistory(history)}</div>
 </body>
 </html>`;
 }
@@ -365,18 +465,26 @@ export class FeatureDetailPanel implements vscode.Disposable {
    * Opens the detail panel for `model`, or reveals and re-renders the
    * already-open one. `workspaceRoot` is the folder the document was
    * discovered under (see discoverFeatureDocuments), used to compute the
-   * subtitle's project name and repo-relative path. `lastWork` is T13's
-   * seam for a git-derived date; omitted, the LAST WORK tile states its
-   * absence.
+   * subtitle's project name and repo-relative path. `lastWork` is T10's
+   * seam for a git-derived date, and `history` is the History region's
+   * data; both default to "not available" so a caller with no git
+   * revisions to hand (or none gathered at all) still renders correctly.
+   * extension.ts is what actually runs git (fetchDocumentRevisions) and
+   * derives both from the result before calling show().
    */
-  show(model: FeatureModel, workspaceRoot: string, lastWork: string | null = null): void {
+  show(
+    model: FeatureModel,
+    workspaceRoot: string,
+    lastWork: string | null = null,
+    history: FeatureHistory = UNAVAILABLE_HISTORY,
+  ): void {
     const header = buildPanelHeader(model, workspaceRoot, lastWork);
     const body = buildPanelBody(model);
     const recordedFields = buildRecordedFields(model);
 
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
-      this.panel.webview.html = renderHtml(header, body, recordedFields);
+      this.panel.webview.html = renderHtml(header, body, recordedFields, history);
       this.panel.reveal();
       return;
     }
@@ -390,7 +498,7 @@ export class FeatureDetailPanel implements vscode.Disposable {
       // defaulting it on.
       {},
     );
-    this.panel.webview.html = renderHtml(header, body, recordedFields);
+    this.panel.webview.html = renderHtml(header, body, recordedFields, history);
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });

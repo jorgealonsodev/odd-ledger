@@ -3,6 +3,8 @@ import { FeatureDetailPanel } from './feature-detail-panel';
 import type { FeatureModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
+import { HISTORY_CHART_CAPTION } from '../domain/build-history';
+import type { FeatureHistory } from '../domain/build-history';
 
 /**
  * Runs in the default @vscode/test-cli configuration, which opens no
@@ -359,5 +361,82 @@ suite('FeatureDetailPanel', () => {
     const tdd = rows.find((r) => r.label === 'TDD')!;
     assert.ok(!tdd.value.includes('<img'));
     assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  });
+
+  // --- History region (T13) ------------------------------------------------
+
+  function pointsCount(n: number): FeatureHistory['points'] {
+    const points: Array<{ hash: string; date: string; percentage: number }> = [];
+    for (let i = 0; i < n; i++) {
+      points.push({ hash: `${i}`.padStart(4, '0').repeat(10), date: `2026-09-${String(10 + i).padStart(2, '0')}`, percentage: i * 10 });
+    }
+    return points;
+  }
+
+  test('renders the history sentence, and no chart, below the threshold', () => {
+    const history: FeatureHistory = {
+      available: true,
+      summary: '2 revisions in git, 2026-09-20 to 2026-09-21.',
+      points: pointsCount(2),
+      showChart: false,
+    };
+    panel = new FeatureDetailPanel();
+    panel.show(model(), '/home/dev/checkout-service', null, history);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /<h2>History<\/h2>/);
+    assert.match(html, /2 revisions in git, 2026-09-20 to 2026-09-21\./);
+    // The CSS rule for .history-chart is always present in the <style>
+    // block; what must be absent is the <svg> element itself.
+    assert.ok(!html.includes('<svg class="history-chart"'));
+    assert.ok(!html.includes(HISTORY_CHART_CAPTION));
+  });
+
+  test('renders the history chart with its caption above the threshold', () => {
+    const history: FeatureHistory = {
+      available: true,
+      summary: '3 revisions in git, 2026-09-10 to 2026-09-12.',
+      points: pointsCount(3),
+      showChart: true,
+    };
+    panel = new FeatureDetailPanel();
+    panel.show(model(), '/home/dev/checkout-service', null, history);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /3 revisions in git, 2026-09-10 to 2026-09-12\./);
+    assert.match(html, /<svg class="history-chart"/);
+    // Three points plotted, one <circle> per revision.
+    assert.equal((html.match(/<circle /g) ?? []).length, 3);
+    assert.ok(html.includes(HISTORY_CHART_CAPTION));
+  });
+
+  test('states unavailability, with no chart, when history has no usable revisions', () => {
+    panel = new FeatureDetailPanel();
+    // No history argument at all: exercises FeatureDetailPanel's own
+    // default (UNAVAILABLE_HISTORY), not a hand-built stand-in for it.
+    panel.show(model(), '/home/dev/checkout-service');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /<h2>History<\/h2>/);
+    assert.match(html, /not available/i);
+    assert.ok(!html.includes('<svg class="history-chart"'));
+  });
+
+  test('the LAST WORK tile shows the most recent revision date supplied alongside history', () => {
+    const history: FeatureHistory = {
+      available: true,
+      summary: '2 revisions in git, 2026-09-20 to 2026-09-21.',
+      points: pointsCount(2),
+      showChart: false,
+    };
+    panel = new FeatureDetailPanel();
+    panel.show(model(), '/home/dev/checkout-service', '2026-09-21', history);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    // Anchored to the LAST WORK tile's own value cell, not a loose
+    // substring: this fails if the date landed in the wrong tile, or if
+    // the tile still read "not recorded" because lastWork was not wired
+    // through.
+    assert.match(html, /<div class="tile-label">LAST WORK<\/div>\s*<div class="tile-value">2026-09-21<\/div>/);
   });
 });
