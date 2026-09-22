@@ -346,6 +346,46 @@ function renderRemovedHtml(featureName: string): string {
 }
 
 /**
+ * The panel's content when a watcher-triggered refresh could not complete
+ * (refresh-open-panel.ts: the document existed a moment ago, but reading
+ * or re-fetching it then failed). Deliberately distinct wording from
+ * renderRemovedHtml — not a confirmed deletion, so it must not claim the
+ * document is gone, only that the current view may be stale. Same
+ * minimal, script-free CSP as renderRemovedHtml.
+ */
+function renderRefreshFailedHtml(featureName: string): string {
+  const nonce = createNonce();
+  const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
+  const title = escapeHtml(featureName || VIEW_TITLE_FALLBACK);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<style nonce="${nonce}">
+  body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-editor-background);
+    padding: 16px;
+  }
+  .refresh-failed-message {
+    color: var(--vscode-descriptionForeground);
+  }
+</style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <p class="refresh-failed-message">This view could not be refreshed and may be out of date. It will be retried automatically the next time this document changes.</p>
+</body>
+</html>`;
+}
+
+/**
  * Renders the panel's full HTML document. Styles only against VS Code's
  * injected `--vscode-*` CSS variables and the `body.vscode-light`,
  * `body.vscode-dark` and `body.vscode-high-contrast` classes VS Code sets
@@ -677,6 +717,21 @@ export class FeatureDetailPanel implements vscode.Disposable {
     this.panel.title = featureName || VIEW_TITLE_FALLBACK;
     this.panel.webview.html = renderRemovedHtml(featureName);
     this.currentDocumentPath = undefined;
+  }
+
+  /**
+   * Re-renders the open panel to state that a watcher-triggered refresh
+   * failed (refresh-open-panel.ts) without the document being confirmed
+   * gone. Unlike showRemoved, currentDocumentPath is left untouched so
+   * the next watcher-reported touch of the same path still retries,
+   * rather than being silently ignored. A no-op when no panel is open.
+   */
+  showRefreshFailed(featureName: string): void {
+    if (!this.panel) {
+      return;
+    }
+    this.panel.title = featureName || VIEW_TITLE_FALLBACK;
+    this.panel.webview.html = renderRefreshFailedHtml(featureName);
   }
 
   /** Disposes the open panel, if any. Safe to call when none is open. */

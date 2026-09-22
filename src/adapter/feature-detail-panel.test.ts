@@ -214,6 +214,36 @@ suite('FeatureDetailPanel', () => {
     assert.equal(panel.webviewPanel, undefined);
   });
 
+  test('showRefreshFailed replaces the panel content with a message stating the refresh failed, but keeps openDocumentPath', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model({ featureName: 'cache-warm-v2', documentPath: '/workspace/odd/tasks/cache-warm-v2.md' }), '/workspace');
+
+    panel.showRefreshFailed('cache-warm-v2');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /could not be refreshed/i);
+    assert.doesNotMatch(html, /PROGRESS/, 'expected the stale header/tiles render to be fully replaced, not left underneath');
+    assert.equal(panel.openDocumentPath, '/workspace/odd/tasks/cache-warm-v2.md', 'a failed refresh must not rule the document out');
+  });
+
+  test('showRefreshFailed escapes the feature name it renders', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    const maliciousName = '<img src=x onerror=alert(1)>';
+    panel.show(model({ featureName: maliciousName, documentPath: '/workspace/odd/tasks/x.md' }), '/workspace');
+
+    panel.showRefreshFailed(maliciousName);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.ok(!html.includes(maliciousName));
+    assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  });
+
+  test('showRefreshFailed is a no-op when no panel is open', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.showRefreshFailed('cache-warm-v2');
+    assert.equal(panel.webviewPanel, undefined);
+  });
+
   test('escapes a feature name containing markup: no unescaped angle bracket reaches the HTML', () => {
     panel = new FeatureDetailPanel(extensionUri);
     const maliciousName = '<img src=x onerror=alert(1)>';

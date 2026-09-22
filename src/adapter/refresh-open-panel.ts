@@ -9,20 +9,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { buildFeatureModel } from '../domain/build-feature-model';
-import { fetchDocumentRevisions } from '../domain/fetch-git-revisions';
+import { fetchDocumentRevisions, type FetchedRevisions } from '../domain/fetch-git-revisions';
 import { runOpenFeatureFetch, type OpenFeaturePanel } from '../domain/run-open-feature-fetch';
 
 /**
  * The subset of FeatureDetailPanel this module needs: which document (if
  * any) is currently open, the OpenFeaturePanel.show() shape
- * runOpenFeatureFetch already depends on, and showRemoved() for the
- * deleted-while-open case. Kept as a narrow interface, mirroring
- * run-open-feature-fetch.ts's own OpenFeaturePanel, so a test can supply
- * a fake instead of a real webview.
+ * runOpenFeatureFetch already depends on, showRemoved() for the
+ * deleted-while-open case, and showRefreshFailed() for a refresh that
+ * failed without the document being confirmed gone. Kept narrow, so a
+ * test can supply a fake instead of a real webview.
  */
 export interface RefreshablePanel extends OpenFeaturePanel {
   readonly openDocumentPath: string | undefined;
   showRemoved(featureName: string): void;
+  showRefreshFailed(featureName: string): void;
 }
 
 /**
@@ -49,8 +50,24 @@ function resolveWorkspaceRoot(documentPath: string): string {
  * through the same runOpenFeatureFetch path oddLedger.openFeature uses,
  * so a watcher-triggered refresh and a manual re-open produce identical
  * output.
+ *
+ * existsSync only proves something was at documentPath the instant it
+ * ran, not that reading or re-fetching it will still succeed a moment
+ * later, so both are guarded: a document that vanishes, becomes
+ * unreadable, or fails to fetch/render in that window renders the
+ * refresh-failed state instead of throwing. The only caller
+ * (extension.ts) invokes this as `void refreshOpenPanelIfTouched(...)`,
+ * so the returned promise must never reject — an unhandled rejection
+ * there would be invisible to the user.
+ *
+ * `fetchRevisions` defaults to the real fetchDocumentRevisions; a test
+ * can inject a fake to exercise the fetch-fails path.
  */
-export async function refreshOpenPanelIfTouched(panel: RefreshablePanel, touchedPaths: ReadonlySet<string>): Promise<void> {
+export async function refreshOpenPanelIfTouched(
+  panel: RefreshablePanel,
+  touchedPaths: ReadonlySet<string>,
+  fetchRevisions: (repoRoot: string, documentPath: string) => Promise<FetchedRevisions> = fetchDocumentRevisions,
+): Promise<void> {
   const documentPath = panel.openDocumentPath;
   if (!documentPath || !touchedPaths.has(documentPath)) {
     return;
@@ -63,8 +80,12 @@ export async function refreshOpenPanelIfTouched(panel: RefreshablePanel, touched
     return;
   }
 
-  const workspaceRoot = resolveWorkspaceRoot(documentPath);
-  const text = readFileSync(documentPath, 'utf-8');
-  const model = buildFeatureModel(featureName, documentPath, text);
-  await runOpenFeatureFetch(model, workspaceRoot, panel, fetchDocumentRevisions);
+  try {
+    const workspaceRoot = resolveWorkspaceRoot(documentPath);
+    const text = readFileSync(documentPath, 'utf-8');
+    const model = buildFeatureModel(featureName, documentPath, text);
+    await runOpenFeatureFetch(model, workspaceRoot, panel, fetchRevisions);
+  } catch {
+    panel.showRefreshFailed(featureName);
+  }
 }
