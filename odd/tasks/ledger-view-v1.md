@@ -364,6 +364,22 @@ user's decisions under ordinary repository policy.
       authority burned.** Seven advisory findings; one of them describes a real input class
       and is raised as T18 below, the rest are recorded under Progress.
 
+- [ ] T19 Closedness and the `Open` filter disagree about which sections count
+      `isFeatureClosed` reads only `progress`, which sums the sections that count toward
+      it, while the `Open` filter admits items from every section regardless. A feature
+      whose progress-bearing sections are all done therefore renders muted and sorted last
+      while `Open` still shows its outstanding acceptance criteria. One of the two rules
+      has to give; which one is the decision this task carries.
+      Route: delegated writer.
+
+- [ ] T20 The locale test compares a precomposed filename byte-exact
+      It writes a document whose filename carries a precomposed diacritic and compares the
+      discovered feature name with `deepEqual`. A filesystem that normalizes filenames to
+      their decomposed form returns a different byte sequence for the same name, so the
+      test fails there for a reason that has nothing to do with collation. Normalize both
+      sides, or assert on relative order rather than exact strings.
+      Route: delegated writer.
+
 - [ ] T18 A Next step written as a checklist item renders twice
       The section filter keeps every section holding at least one checklist item, and the
       next step is additionally emitted as its own node, so a document whose `## Next step`
@@ -373,10 +389,54 @@ user's decisions under ordinary repository policy.
       two renderings wins, not a typo.
       Route: direct inline.
 
-- [ ] T9 Tree behaviour: filter and ordering
+- [x] T9 Tree behaviour: filter and ordering
       `All` / `Open` / `Unproven`; fully-closed features sorted last and muted; reveal the
       Markdown at a task's line on selection.
-      Route: delegated writer.
+      Route: delegated writer. Trigger evidence: 11 files across both layers.
+      DONE `77b3ad8`.
+      A second domain module, `filter-and-order-features.ts`, holds the three decisions
+      this task adds — `isFeatureClosed`, `compareFeatures`, `filterFeature` — so none of
+      them needs an editor to test. The adapter holds only the active filter and applies
+      them.
+      **A filter narrows what is visible, never the counts.** `progress` keeps reporting
+      the document's real ratio while `Open` or `Unproven` hides some of the items behind
+      it, because a tree that recomputed the ratio from what survived a filter would report
+      progress the document never recorded.
+      A feature with zero countable items is not closed. `deriveChecklistState` already
+      refuses to call zero items complete, and closedness inherits that: there is no
+      measured progress to have finished.
+      **Both orderings are now pinned to a collation.** The T7 review raised
+      `localeCompare` called with no locale, which resolves from the host's ICU build and
+      its `LANG`/`LC_ALL`. Fixing only the tree's comparison would not have closed it: that
+      comparison uses `sensitivity: 'base'`, so names differing solely by case or accent
+      compare equal, and a stable sort then preserves whatever order arrived from
+      discovery — whose own sort was still host-resolved. Verified rather than assumed:
+      under a Swedish locale the unpinned discovery returns `anchor-store, zebra-cache,
+      ärende-queue` where English returns `anchor-store, ärende-queue, zebra-cache`. Both
+      comparisons now name `'en'` explicitly, and a domain test locks it.
+      The second T7 ordering finding is closed too: the fixture set was rebalanced so the
+      alphabetically first feature is the fully closed one, moving from first in discovery
+      order to last in rendered order. Deleting the sort call now changes what the test
+      sees.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 128 tests, 127 pass,
+      1 skipped; `npm run test:extension` 36 passing in the no-folder profile and 16 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean. RED observed first as `TS2307` on the missing
+      `filter-and-order-features` module. Assertions that passed on their first run were
+      falsified against deliberately broken implementations and reverted byte-identical,
+      confirmed by checksum — including the locale test, which was falsified by unpinning
+      the collation and re-running the suite under `LC_ALL=sv_SE.UTF-8`, where it failed
+      with the Swedish ordering above.
+      **Parent correction, recorded because the route was wrong.** The collation fix,
+      spanning four files, was made inline by the parent instead of delegated to a writer,
+      which crossed this document's own writer trigger. The user caught it. Subsequent
+      corrections go to a bounded writer.
+      Review: RDD assess over `aca1fb7..77b3ad8` returned risk **medium**
+      (configuration change in `package.json`, 656 lines, slice budget reached). Consent
+      granted by the user. Lineage `review-46d14787cdfafb2c`, one lens
+      (`review-reliability`). **Approved with zero blocking findings, acknowledged,
+      authority burned.** Seven advisory findings; two describe real defects and are raised
+      as T19 and T20 below.
 
 - [ ] T10 Detail panel: header and tiles
       Title from the filename, subtitle with project, path and branch, the Next step block
@@ -449,7 +509,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 8 of 18 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 9 of 20 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -474,6 +534,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 8 of 18 tasks cl
 | `f798fc9` | T7 recorded as implemented and awaiting its review |
 | `67d3488` | T7 review approved, recorded as closed |
 | `218c8a5` | T8 feature, section, task and next-step nodes |
+| `aca1fb7` | T8 review approved, recorded as closed; T18 raised |
+| `77b3ad8` | T9 filter, ordering and reveal-on-click |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -521,6 +583,16 @@ named for a function it never calls; the trailing-punctuation stripper is applie
 branch value including code spans and is covered by no test; and the string
 `checked, no evidence recorded` is written twice with nothing pinning the two together.
 
+**Advisory findings from the T9 review (2026-09-22), none blocking.** Two became T19 and
+T20. Of the rest: the three filter commands are registered and declared but every test
+calls the provider method directly, so a command-id typo in either place would go
+unnoticed; the filter introduces a new way for the root list to come back empty, which
+falls through to welcome content written for a different cause and is exercised by no
+test; one adapter test's name claims two behaviours and asserts one; a filtered section
+keeps its unfiltered counts, which is the deliberate feature-level rule applied one level
+down but neither documented nor asserted there; and the active filter is not observable
+anywhere in the interface, so the toolbar gives no feedback about which one is on.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -532,6 +604,5 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T9: the tree's filter and ordering, which also absorbs two ordering findings the
-T7 review raised. The reviewed boundary is the commit that records this closure, the last
-one in the Progress table.
+Next is T10: the detail panel's header and tiles. The reviewed boundary is the commit that
+records this closure, the last one in the Progress table.
