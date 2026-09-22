@@ -789,18 +789,104 @@ Inherited from `docs/PRD.md`, verified against the five real documents locally a
 synthetic corpus in CI:
 
 - [ ] All five real documents parse and render without error.
+      Not provable here. This depends on the five real ODD documents, which deliberately
+      never enter this repository. `real-corpus.optional.test.ts` checks parsing alone,
+      opt-in via `ODD_LEDGER_REAL_CORPUS_DIR`, and it skipped in this audit's run of
+      `npm run test:domain` for lack of that variable. Rendering is checked nowhere.
+      Closing this needs someone with the real documents on disk to run that check, then
+      open the built extension against them and look.
+
 - [ ] Corpus document C renders two section nodes with IDs scoped per section.
-- [ ] Its `- [~]` item renders as `declined`, in the total and not as done.
-- [ ] Corpus document D, missing four optional headings, renders title, objective and
+      Provable but not proven. T4's corrected survey found document C's real shape is
+      `Tasks` (`T*`) plus `Pending`, where `Pending` mixes `P*` and `T*` together and
+      `T11` is missing entirely. No fixture reproduces that two-section shape:
+      `mobile-onboarding-revamp` collapses the mixed-prefix-with-gap quirk into one
+      section, and `cli-flow-audit`'s two sections (`Tasks`/`F*`, `Backlog`/`BK*`) each
+      carry a single, unmixed prefix. A fixture built to document C's exact shape,
+      asserted through `parseDocumentStructure`/`parseChecklist`, would close this
+      cheaply.
+
+- [x] Its `- [~]` item renders as `declined`, in the total and not as done.
+      `feature-tree-provider.workspace-test.ts`: "a declined task ([~]) renders with the
+      circle-slash icon and counts in the section total" — `beta-notification-hub`'s
+      declined item renders with the circle-slash icon while its section reads `2/4`,
+      counted without being counted done.
+
+- [x] Corpus document D, missing four optional headings, renders title, objective and
       full task list, and shows no Next step line rather than an empty one.
-- [ ] A checked task with no evidence renders `done-unproven` and counts in `UNPROVEN`.
-- [ ] Documents with no line forecast show `not recorded`, not zero.
+      `zeta-report-export`, in the sample-workspace fixture, carries exactly the four
+      core headings (Objective, Problem, Constraints, Tasks) and none of Scope,
+      Progress, Next step or Acceptance criteria — document D's own shape.
+      `feature-tree-provider.workspace-test.ts`: "a feature with no Next step section
+      renders sections only, no trailing next-step node" and "each feature node shows
+      its done/total counts derived from the domain layer" (zeta: `1/2`) close it; the
+      task-list-as-nodes rendering itself is proven generically by the hierarchy test
+      over `alpha-widget-cache` in the same file.
+
+- [x] A checked task with no evidence renders `done-unproven` and counts in `UNPROVEN`.
+      `derive-checklist-state.test.ts`: "a done item with neither evidence nor a commit
+      reference is done-unproven". `feature-tree-provider.workspace-test.ts`: "a
+      done-unproven task renders the warning icon and its 'checked, no evidence
+      recorded' description" and "a feature with an unproven task shows the unproven
+      badge in its description". `build-panel-header.test.ts`: "the UNPROVEN tile
+      pluralises for more than one unproven task" and its singular sibling.
+
+- [x] Documents with no line forecast show `not recorded`, not zero.
+      `build-recorded-fields.test.ts`: "Line budget is 'not recorded' when there is no
+      delivery section at all" and "...when the delivery section states no figure".
+
 - [ ] Single-revision documents state their revision count instead of drawing a chart.
-- [ ] A task line whose first token is not `T<n>` still renders.
-- [ ] The project holding corpus documents D and E renders both, closed one last and muted.
+      Provable but not proven. `build-history.test.ts`'s "states the singular sentence
+      for exactly one revision" checks only the sentence text, never `showChart`. The
+      chart threshold (`CHART_THRESHOLD_REVISIONS = 3`) is tested at 2 and 3 revisions,
+      never at 1. No existing test's failure would specifically catch a broken
+      single-revision chart suppression; one asserting `showChart === false` at exactly
+      one revision, alongside the singular sentence, would close it cheaply.
+
+- [x] A task line whose first token is not `T<n>` still renders.
+      `parse-checklist.test.ts`: "a task line whose first token is not an identifier
+      still renders, with no ID and the full text as title" — its fixture text is this
+      criterion's own sentence, asserted to parse with `id: null` and the sentence as
+      its title.
+
+- [x] The project holding corpus documents D and E renders both, closed one last and muted.
+      `feature-tree-provider.workspace-test.ts`: "getChildren returns one feature node
+      per discovered document, closed features sorted last (T9)" — the sample
+      workspace's three real documents render together with the fully-closed one sorted
+      last — and "a fully-closed, fully-proven feature renders green with the pass icon
+      (T9, extended)" for its distinct rendering. "Muted" is this codebase's own term
+      for that state (PRD: "sorts to the bottom and renders muted"); nothing in the
+      implementation is a literal grey or dimmed colour, only the green "pass" or amber
+      "warning" tokens.
+
 - [ ] A repository without `odd/tasks/` shows welcome content, not an error.
+      Not provable here. `discover-feature-documents.test.ts`'s "returns an empty array
+      when the root has no odd/ directory at all" and "...when odd/ exists but tasks/
+      does not" prove the no-throw, empty-array half. The `viewsWelcome` text is a
+      static `package.json` declaration with no `when` clause; whether it actually
+      appears in the sidebar is VS Code's own rendering, which no extension-host test in
+      this suite exercises. Closing this needs a human to open the extension against a
+      repository without `odd/tasks/` and look.
+
 - [ ] The UI renders correctly in light, dark and high-contrast themes, and at a narrow
       sidebar width.
+      Not provable here. `feature-detail-panel.test.ts`'s "declares a
+      Content-Security-Policy and styles all three VS Code theme classes" and "the
+      rendered HTML contains no hardcoded colour: no hex, no rgb(), no named CSS colour"
+      prove theme-token discipline structurally, not visual correctness. No test
+      measures layout at a narrow width. Closing this needs a human to switch through
+      light, dark and high-contrast themes and narrow the sidebar in the running
+      extension.
+
+These eleven criteria were inherited from `docs/PRD.md` on day one and were never
+consulted as a gate while the twenty-four tasks above were closed: the tasks document
+tracked its own evidence per task, and nobody tied that evidence back to this list until
+this audit. Audited now: six close with an existing test whose failure would mean the
+criterion false, cited above; two are provable cheaply against the synthetic corpus but
+have no test yet; three depend on the five real documents or on a human looking at the
+running extension and cannot be closed from this repository alone. `24/24` tasks closed
+never implied `11/11` criteria proven, and the gap between the two is what this audit
+closes honestly instead of by assumption.
 
 ## Checks
 
