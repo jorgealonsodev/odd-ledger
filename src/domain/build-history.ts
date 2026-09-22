@@ -96,13 +96,6 @@ export const UNAVAILABLE_HISTORY: FeatureHistory = {
   showChart: false,
 };
 
-export const PENDING_HISTORY: FeatureHistory = {
-  available: false,
-  summary: 'Reading git history…',
-  points: [],
-  showChart: false,
-};
-
 /** Recomputes a revision's completion percentage by parsing its document
  * text with the same three parsers buildFeatureModel composes (T3, T4,
  * T5) — never a second, independent reading of "done". */

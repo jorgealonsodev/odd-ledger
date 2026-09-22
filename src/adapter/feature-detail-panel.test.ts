@@ -3,7 +3,7 @@ import { FeatureDetailPanel } from './feature-detail-panel';
 import type { FeatureModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
-import { HISTORY_CHART_CAPTION, PENDING_HISTORY } from '../domain/build-history';
+import { HISTORY_CHART_CAPTION } from '../domain/build-history';
 import type { FeatureHistory } from '../domain/build-history';
 
 /**
@@ -122,17 +122,6 @@ suite('FeatureDetailPanel', () => {
     const secondPanel = panel.webviewPanel;
     assert.ok(secondPanel);
     assert.notEqual(secondPanel, firstPanel);
-  });
-
-  test('isAlive reports false before any show(), true once open, and false again once disposed', () => {
-    panel = new FeatureDetailPanel();
-    assert.equal(panel.isAlive(), false, 'no panel has been shown yet');
-
-    panel.show(model({ featureName: 'cache-warm-v2' }), '/home/dev/checkout-service');
-    assert.equal(panel.isAlive(), true, 'a panel is now open');
-
-    panel.dispose();
-    assert.equal(panel.isAlive(), false, 'dispose() closed it');
   });
 
   test('escapes a feature name containing markup: no unescaped angle bracket reaches the HTML', () => {
@@ -419,15 +408,6 @@ suite('FeatureDetailPanel', () => {
     // Three points plotted, one <circle> per revision.
     assert.equal((html.match(/<circle /g) ?? []).length, 3);
     assert.ok(html.includes(HISTORY_CHART_CAPTION));
-  });
-
-  test('states a distinct pending sentence, with no chart, while history is still being read', () => {
-    panel = new FeatureDetailPanel();
-    panel.show(model(), '/home/dev/checkout-service', null, PENDING_HISTORY);
-    const html = panel.webviewPanel?.webview.html ?? '';
-    assert.match(html, /<h2>History<\/h2>/);
-    assert.match(html, /reading/i);
-    assert.ok(!html.includes('not available') && !html.includes('<svg class="history-chart"'));
   });
 
   test('states unavailability, with no chart, when history has no usable revisions', () => {

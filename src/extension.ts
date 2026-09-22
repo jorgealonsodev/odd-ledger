@@ -26,7 +26,6 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(refreshCommand);
 
-  let latestOpenFeatureRequest = 0;
   const openFeatureCommand = vscode.commands.registerCommand('oddLedger.openFeature', async (node?: FeatureNode) => {
     if (!node) {
       // Invoked with no argument, e.g. from the command palette rather
@@ -40,8 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // directory keeps this from throwing if the folder cannot be
     // resolved; the relative path then degrades to just the filename.
     const workspaceRoot = vscode.workspace.getWorkspaceFolder(documentUri)?.uri.fsPath ?? dirname(node.model.documentPath);
-    const requestToken = ++latestOpenFeatureRequest;
-    await runOpenFeatureFetch(node.model, workspaceRoot, detailPanel, fetchDocumentRevisions, () => requestToken === latestOpenFeatureRequest);
+    await runOpenFeatureFetch(node.model, workspaceRoot, detailPanel, fetchDocumentRevisions);
   });
   context.subscriptions.push(openFeatureCommand);
 
