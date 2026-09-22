@@ -4,7 +4,7 @@ import { FeatureDetailPanel } from './adapter/feature-detail-panel';
 import type { FeatureNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
 import { fetchDocumentRevisions } from './domain/fetch-git-revisions';
-import { buildHistory, mostRecentWorkDate } from './domain/build-history';
+import { runOpenFeatureFetch } from './domain/run-open-feature-fetch';
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new FeatureTreeDataProvider();
@@ -26,6 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(refreshCommand);
 
+  let latestOpenFeatureRequest = 0;
   const openFeatureCommand = vscode.commands.registerCommand('oddLedger.openFeature', async (node?: FeatureNode) => {
     if (!node) {
       // Invoked with no argument, e.g. from the command palette rather
@@ -39,14 +40,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // directory keeps this from throwing if the folder cannot be
     // resolved; the relative path then degrades to just the filename.
     const workspaceRoot = vscode.workspace.getWorkspaceFolder(documentUri)?.uri.fsPath ?? dirname(node.model.documentPath);
-    // T13: git-derived history. workspaceRoot is passed as git's own -C
-    // directory and node.model.documentPath as a separate argument, so
-    // this is the same resolution the subtitle's path already uses, never
-    // a second, independent guess at where the repository lives.
-    const { revisions, truncated, skippedCount } = await fetchDocumentRevisions(workspaceRoot, node.model.documentPath);
-    const history = buildHistory(revisions, { truncated, skippedCount });
-    const lastWork = mostRecentWorkDate(history);
-    detailPanel.show(node.model, workspaceRoot, lastWork, history);
+    const requestToken = ++latestOpenFeatureRequest;
+    await runOpenFeatureFetch(node.model, workspaceRoot, detailPanel, fetchDocumentRevisions, () => requestToken === latestOpenFeatureRequest);
   });
   context.subscriptions.push(openFeatureCommand);
 

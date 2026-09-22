@@ -3,7 +3,7 @@ import { FeatureDetailPanel } from './feature-detail-panel';
 import type { FeatureModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
-import { HISTORY_CHART_CAPTION } from '../domain/build-history';
+import { HISTORY_CHART_CAPTION, PENDING_HISTORY } from '../domain/build-history';
 import type { FeatureHistory } from '../domain/build-history';
 
 /**
@@ -408,6 +408,15 @@ suite('FeatureDetailPanel', () => {
     // Three points plotted, one <circle> per revision.
     assert.equal((html.match(/<circle /g) ?? []).length, 3);
     assert.ok(html.includes(HISTORY_CHART_CAPTION));
+  });
+
+  test('states a distinct pending sentence, with no chart, while history is still being read', () => {
+    panel = new FeatureDetailPanel();
+    panel.show(model(), '/home/dev/checkout-service', null, PENDING_HISTORY);
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /<h2>History<\/h2>/);
+    assert.match(html, /reading/i);
+    assert.ok(!html.includes('not available') && !html.includes('<svg class="history-chart"'));
   });
 
   test('states unavailability, with no chart, when history has no usable revisions', () => {
