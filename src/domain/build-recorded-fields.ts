@@ -15,6 +15,7 @@
 
 import type { FeatureModel, SectionModel } from './build-feature-model';
 import type { DocumentSection, SectionKind } from './parse-document-structure';
+import { unwrapLines } from './unwrap-wrapped-lines';
 
 const NOT_RECORDED = 'not recorded';
 
@@ -49,42 +50,68 @@ function stripLeadingLabel(text: string): string {
   return text.replace(/^[A-Za-z][A-Za-z0-9 '-]{0,40}:\s*/, '');
 }
 
-function truncate(text: string, budget: number): string {
+/** A sentence-ending mark immediately followed by whitespace or the end of
+ * the text — the boundary truncateAtBoundary prefers over a mid-word cut. */
+const SENTENCE_END_RE = /[.!?](?=\s|$)/g;
+
+/** The index of the last sentence-ending mark at or before `budget`
+ * characters into `text`, or -1 when none is found there. */
+function lastSentenceEndWithin(text: string, budget: number): number {
+  SENTENCE_END_RE.lastIndex = 0;
+  let last = -1;
+  let match: RegExpExecArray | null;
+  while ((match = SENTENCE_END_RE.exec(text)) !== null) {
+    if (match.index > budget - 1) {
+      break;
+    }
+    last = match.index;
+  }
+  return last;
+}
+
+/**
+ * Truncates `text` to at most `budget` characters. Prefers to end on a real
+ * sentence boundary, so the value still reads as a complete thought rather
+ * than an arbitrary fragment; falls back to the last word boundary with an
+ * ellipsis when no sentence ends within the budget. Never cuts a word in
+ * half.
+ */
+function truncateAtBoundary(text: string, budget: number): string {
   if (text.length <= budget) {
     return text;
+  }
+  const sentenceEnd = lastSentenceEndWithin(text, budget);
+  if (sentenceEnd !== -1) {
+    return text.slice(0, sentenceEnd + 1);
+  }
+  const wordBoundary = text.slice(0, budget).lastIndexOf(' ');
+  if (wordBoundary > 0) {
+    return `${text.slice(0, wordBoundary).trimEnd()}…`;
   }
   return `${text.slice(0, budget).trimEnd()}…`;
 }
 
-/** Reduces one already-identified line to a table cell's display value:
- * emphasis markers stripped, one leading label stripped, then truncated to
- * SUMMARY_CHAR_BUDGET. */
+/** Reduces one already-identified (already-unwrapped) logical line to a
+ * table cell's display value: emphasis markers stripped, one leading label
+ * stripped, then truncated to SUMMARY_CHAR_BUDGET. */
 function summarizeLine(line: string): string {
   const withoutEmphasis = stripEmphasis(line.trim());
   const withoutLabel = stripLeadingLabel(withoutEmphasis).trim();
-  return truncate(withoutLabel.length > 0 ? withoutLabel : withoutEmphasis, SUMMARY_CHAR_BUDGET);
-}
-
-/** The first non-empty line of a section's body, or `null` when the body
- * has none. "Short" is the first line, not the whole body: these sections
- * run to paragraphs in the real corpus and a table cell holds a line. */
-function firstNonEmptyLine(body: string): string | null {
-  const line = body
-    .split(/\r\n|\r|\n/)
-    .map((l) => l.trim())
-    .find((l) => l.length > 0);
-  return line ?? null;
+  const candidate = withoutLabel.length > 0 ? withoutLabel : withoutEmphasis;
+  return truncateAtBoundary(candidate, SUMMARY_CHAR_BUDGET);
 }
 
 /** Reads a section's one-line summary by its SectionKind, or "not recorded"
  * when the document has no such section or its body is empty. Used for TDD
- * (the `tdd-mode` section) and Delivery (the `delivery` section). */
+ * (the `tdd-mode` section) and Delivery (the `delivery` section). The body
+ * is unwrapped first, so a hard-wrapped first paragraph is read as one
+ * sentence rather than cut at the source's own line wrap. */
 function formatSectionSummary(sections: readonly DocumentSection[], kind: SectionKind): string {
   const section = findSectionByKind(sections, kind);
   if (!section) {
     return NOT_RECORDED;
   }
-  const line = firstNonEmptyLine(section.body);
+  const [line] = unwrapLines(section.body);
   return line ? summarizeLine(line) : NOT_RECORDED;
 }
 
@@ -131,15 +158,17 @@ const LINE_COUNT_RE = /\d[\d,]*\+?\s*(?:authored\s+)?(?:changed\s+)?lines?\b/i;
 /**
  * Line budget comes from a figure the delivery section states in its own
  * words, or "not recorded" when the section is absent or states none. This
- * never invents or computes a figure the document does not carry.
+ * never invents or computes a figure the document does not carry. The body
+ * is unwrapped before searching, so the sentence stating the figure is
+ * matched and displayed whole, even when the source hard-wraps it onto more
+ * than one physical line.
  */
 function formatLineBudget(sections: readonly DocumentSection[]): string {
   const delivery = findSectionByKind(sections, 'delivery');
   if (!delivery) {
     return NOT_RECORDED;
   }
-  const lines = delivery.body.split(/\r\n|\r|\n/);
-  const budgetLine = lines.find((line) => LINE_COUNT_RE.test(line));
+  const budgetLine = unwrapLines(delivery.body).find((line) => LINE_COUNT_RE.test(line));
   return budgetLine ? summarizeLine(budgetLine) : NOT_RECORDED;
 }
 
@@ -148,22 +177,33 @@ function formatLineBudget(sections: readonly DocumentSection[]): string {
  * above, applied to the review evidence instead. */
 const REVIEW_NOTE_RE = /^review:/i;
 
+/**
+ * The most recently recorded `Review:`-labelled logical line in one item's
+ * evidence, or `null` when it names none. Evidence is unwrapped first, so
+ * a hard-wrapped review note is matched and returned whole; when more than
+ * one such line is present (an item reviewed more than once), the last one
+ * in document order wins — the one that describes the item's current
+ * state — never the first.
+ */
 function findReviewLine(evidence: string): string | null {
-  const line = evidence
-    .split(/\r\n|\r|\n/)
-    .map((l) => l.trim())
-    .find((l) => REVIEW_NOTE_RE.test(l));
-  return line ?? null;
+  let last: string | null = null;
+  for (const line of unwrapLines(evidence)) {
+    if (REVIEW_NOTE_RE.test(line)) {
+      last = line;
+    }
+  }
+  return last;
 }
 
 /**
  * Review reads the most recently recorded review evidence: the last
- * `Review:`-labelled line found while walking the model's item-bearing
- * sections and their items in document order. The last one, not the
- * first, because a document records one review line per task as tasks
- * close, and the most recent is the one that describes the document's
- * current state. "not recorded" when no item names one — never a guessed
- * verdict.
+ * `Review:`-labelled logical line found while walking the model's
+ * item-bearing sections and their items in document order, taking the
+ * last matching line within an item too (see findReviewLine). The last
+ * one, not the first, because a document records one review line per task
+ * as tasks close, and the most recent is the one that describes the
+ * document's current state. "not recorded" when no item names one — never
+ * a guessed verdict.
  */
 function formatReview(sections: readonly SectionModel[]): string {
   let last: string | null = null;

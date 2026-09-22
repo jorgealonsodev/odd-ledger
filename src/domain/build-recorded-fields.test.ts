@@ -266,3 +266,88 @@ test('Review is "not recorded" when no item records review evidence', () => {
   const fields = buildRecordedFields(modelFromText(text));
   assert.equal(fields.find((f) => f.label === 'Review')!.value, 'not recorded');
 });
+
+test('Review takes the most recently recorded line when a single item carries more than one', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Tasks',
+    '',
+    '- [x] T1 Ship it',
+    '      Review: first attempt, correction required.',
+    '      Review: second attempt, approved and acknowledged.',
+  ].join('\n');
+
+  const fields = buildRecordedFields(modelFromText(text));
+  const review = fields.find((f) => f.label === 'Review')!;
+
+  assert.match(review.value, /second attempt/);
+  assert.ok(!review.value.includes('first attempt'));
+});
+
+test('Review takes the newest across both items and lines when both repeat within a document', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Tasks',
+    '',
+    '- [x] T1 Ship it',
+    '      Review: oldest, from the first attempt at T1.',
+    '      Review: still older than anything in T2.',
+    '',
+    '## Backlog',
+    '',
+    '- [x] T2 Ship it too',
+    '      Review: newest, the most recently recorded line in the document.',
+  ].join('\n');
+
+  const fields = buildRecordedFields(modelFromText(text));
+  const review = fields.find((f) => f.label === 'Review')!;
+
+  assert.match(review.value, /newest, the most recently recorded line/);
+  assert.ok(!review.value.includes('oldest'));
+  assert.ok(!review.value.includes('still older'));
+});
+
+// --- Line budget: the figure survives a hard-wrapped delivery paragraph -----
+
+test('Line budget keeps the stated figure and the full sentence when the delivery paragraph wraps across source lines', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Delivery',
+    '',
+    '**Strategy**: ask-on-risk (default).',
+    '**Forecast**: roughly 1,234 authored changed lines including tests. It was a guess that',
+    'undershot by a wide margin once the real scope became clear.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+
+  const fields = buildRecordedFields(modelFromText(text));
+  const lineBudget = fields.find((f) => f.label === 'Line budget')!;
+
+  assert.equal(lineBudget.value, 'roughly 1,234 authored changed lines including tests.');
+});
+
+// --- Truncation never cuts a word in half ------------------------------------
+
+test('a truncated table value never ends mid-word', () => {
+  // Twenty fixed-width words with no sentence punctuation anywhere: the
+  // character budget lands inside a word rather than on a space, so this
+  // reliably exercises the word-boundary fallback rather than the
+  // sentence-boundary path.
+  const longLine = Array.from({ length: 20 }, () => 'abcdefghij').join(' ');
+  const text = ['# sample', '', '## TDD mode', '', longLine, '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
+
+  const fields = buildRecordedFields(modelFromText(text));
+  const tdd = fields.find((f) => f.label === 'TDD')!;
+
+  assert.ok(tdd.value.endsWith('…'));
+  const withoutEllipsis = tdd.value.slice(0, -1);
+  assert.ok(longLine.startsWith(withoutEllipsis));
+  const nextChar = longLine.charAt(withoutEllipsis.length);
+  assert.ok(nextChar === '' || nextChar === ' ');
+});

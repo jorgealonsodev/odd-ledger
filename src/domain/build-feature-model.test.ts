@@ -62,6 +62,31 @@ test('extractNextStep returns the first non-empty body line with a leading list 
   assert.equal(result!.headingLine, nextStepSection!.headingLine);
 });
 
+test('extractNextStep joins a sentence hard-wrapped across several source lines into one line', () => {
+  const structure = parseDocumentStructure(
+    [
+      '# sample',
+      '',
+      '## Next step',
+      '',
+      'Ship the remaining task, which needs the reviewer to look at the queue',
+      'once more before it can close for good.',
+      '',
+      '## Tasks',
+      '',
+      '- [ ] T1 Do it',
+    ].join('\n'),
+  );
+  const nextStepSection = structure.sections.find((s) => s.kind === 'next-step');
+  assert.ok(nextStepSection);
+  const result = extractNextStep(nextStepSection!);
+  assert.ok(result);
+  assert.equal(
+    result!.line,
+    'Ship the remaining task, which needs the reviewer to look at the queue once more before it can close for good.',
+  );
+});
+
 test('extractNextStep returns null when the document has no Next step section', () => {
   const structure = parseDocumentStructure(['# sample', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n'));
   const nextStepSection = structure.sections.find((s) => s.kind === 'next-step');
@@ -194,7 +219,7 @@ test('buildFeatureModel over cache-warm-v2: branch absent, sections filtered, ne
   assert.ok(model.nextStep);
   assert.equal(
     model.nextStep!.line,
-    'C4: add the manifest size limit, then reopen C6 once the format question',
+    'C4: add the manifest size limit, then reopen C6 once the format question is answered.',
   );
 });
 

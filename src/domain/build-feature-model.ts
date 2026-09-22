@@ -17,6 +17,7 @@ import { deriveChecklistState } from './derive-checklist-state';
 import { parseChecklist } from './parse-checklist';
 import type { DocumentSection, DocumentStructure, SectionKind } from './parse-document-structure';
 import { parseDocumentStructure } from './parse-document-structure';
+import { unwrapLines } from './unwrap-wrapped-lines';
 
 /** A DocumentStructure describing a document with no H1 and no sections,
  * used as the FeatureModel.structure fallback for a document that could
@@ -154,24 +155,20 @@ function stripLeadingListMarker(line: string): string {
 }
 
 /**
- * Reads a `## Next step` section's first non-empty body line, or `null`
- * when the section's body is empty. The PRD is explicit that this case
- * "shows no Next step line rather than an empty one" — an empty section is
- * the same absence as no section at all, from this function's point of
- * view.
+ * Reads a `## Next step` section's first logical line, or `null` when the
+ * section's body is empty. The PRD is explicit that this case "shows no
+ * Next step line rather than an empty one" — an empty section is the same
+ * absence as no section at all, from this function's point of view. The
+ * body is unwrapped first, so a next step hard-wrapped across several
+ * source lines is read as the one sentence it is, rather than cut at the
+ * source's own line wrap.
  */
 export function extractNextStep(section: DocumentSection): NextStepModel | null {
-  const lines = section.body.split(/\r\n|\r|\n/);
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (trimmed.length === 0) {
-      continue;
-    }
-    return { line: stripLeadingListMarker(trimmed), headingLine: section.headingLine };
+  const [line] = unwrapLines(section.body);
+  if (!line) {
+    return null;
   }
-
-  return null;
+  return { line: stripLeadingListMarker(line), headingLine: section.headingLine };
 }
 
 /** The first commit-shaped hex token in the item's evidence, falling back
