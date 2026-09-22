@@ -1,0 +1,127 @@
+{
+  "name": "odd-ledger",
+  "displayName": "ODD Ledger",
+  "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
+  "icon": "resources/icon.png",
+  "version": "1.0.0",
+  "publisher": "jorgealonsodev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jorgealonsodev/odd-ledger.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "oddLedger",
+          "title": "ODD Ledger",
+          "icon": "resources/activity-bar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "oddLedger": [
+        {
+          "id": "oddLedger.features",
+          "name": "Features"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "oddLedger.features",
+        "contents": "This workspace has no odd/tasks/ folder, so there are no ODD features to show."
+      }
+    ],
+    "commands": [
+      {
+        "command": "oddLedger.refresh",
+        "title": "Refresh",
+        "category": "ODD Ledger",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "oddLedger.openFeature",
+        "title": "Open Feature",
+        "category": "ODD Ledger"
+      },
+      {
+        "command": "oddLedger.filterAll",
+        "title": "Show All",
+        "category": "ODD Ledger",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "oddLedger.filterOpen",
+        "title": "Show Open",
+        "category": "ODD Ledger",
+        "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "oddLedger.filterUnproven",
+        "title": "Show Unproven",
+        "category": "ODD Ledger",
+        "icon": "$(warning)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "oddLedger.refresh",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterAll",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterOpen",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterUnproven",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "check-types": "tsc --noEmit -p ./",
+    "bundle": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "clean": "rm -rf dist out",
+    "test:domain": "npm run compile && cd out/domain && node --test --test-reporter=spec",
+    "test:extension": "npm run compile && npm run bundle && vscode-test",
+    "test:package": "npm run clean && npm run bundle -- --production && node --test scripts/verify-package.test.js",
+    "package": "npm run clean && vsce package",
+    "vscode:prepublish": "npm run check-types && npm run bundle -- --production"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^26.6.2",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@vscode/codicons": "^0.0.46-24",
+    "markdown-it": "^15.0.2"
+  }
+}

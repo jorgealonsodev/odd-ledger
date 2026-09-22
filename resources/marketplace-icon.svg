@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!--
+    The Marketplace listing icon. Unlike the activity bar icon, which VS Code
+    treats as an alpha silhouette and tints by theme, this one is shown exactly
+    as drawn.
+
+    The background is transparent and the clipboard fills the canvas, so the
+    icon sits on whatever the listing page uses rather than carrying a plate of
+    its own. That is why the body has a drawn border: a near-white block on a
+    transparent background would vanish against a light page, and the outline is
+    what keeps its silhouette on both.
+
+    The checklist is the subject, as in the activity bar icon, so the two read
+    as the same product. The method is named as the first item's own text rather
+    than as a title, which keeps the list the thing the eye lands on. The last
+    row is the distinction this extension exists for: the same closed tick, in
+    amber, because that task records no evidence and a tick alone proves
+    nothing.
+
+    The lettering is drawn as paths rather than as a text element, so the icon
+    renders identically on a machine lacking whatever font that text would have
+    named.
+  -->
+
+  <!-- Clip tab -->
+  <rect x="94" y="6" width="68" height="38" rx="12" fill="#9AA7BC" stroke="#1B2330" stroke-width="6"/>
+
+  <!-- Clipboard body, filling the canvas -->
+  <rect x="11" y="30" width="234" height="219" rx="22" fill="#E8EDF5" stroke="#1B2330" stroke-width="6"/>
+
+  <!-- Re-draw the tab's lower half over the body so the two read as one shape -->
+  <rect x="94" y="6" width="68" height="30" rx="12" fill="#9AA7BC" stroke="#1B2330" stroke-width="6"/>
+  <rect x="106" y="16" width="44" height="14" rx="7" fill="#1B2330"/>
+
+  <!-- First item: closed, proven, and it names the method -->
+  <path d="M40 92 L54 106 L80 80"
+        fill="none" stroke="#2EA043" stroke-width="15"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#1B2330" fill-rule="evenodd" transform="translate(64.7,28.5) scale(0.57)">
+    <path d="M85 78a23 23 0 0 1 23 23v14a23 23 0 0 1-46 0v-14a23 23 0 0 1 23-23Zm0 16a7 7 0 0 0-7 7v14a7 7 0 0 0 14 0v-14a7 7 0 0 0-7-7Z"/>
+    <path d="M116 78h17a23 23 0 0 1 23 23v14a23 23 0 0 1-23 23h-17V78Zm16 16v28h1a7 7 0 0 0 7-7v-14a7 7 0 0 0-7-7h-1Z"/>
+    <path d="M164 78h17a23 23 0 0 1 23 23v14a23 23 0 0 1-23 23h-17V78Zm16 16v28h1a7 7 0 0 0 7-7v-14a7 7 0 0 0-7-7h-1Z"/>
+  </g>
+
+  <!-- Second item: closed and proven -->
+  <path d="M40 156 L54 170 L80 144"
+        fill="none" stroke="#2EA043" stroke-width="15"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="100" y="150" width="112" height="15" rx="7.5" fill="#9AA7BC"/>
+
+  <!-- Third item: the same tick, recording nothing, which is why it is not green -->
+  <path d="M40 215 L54 229 L80 203"
+        fill="none" stroke="#D29922" stroke-width="15"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="100" y="209" width="112" height="15" rx="7.5" fill="#9AA7BC"/>
+</svg>

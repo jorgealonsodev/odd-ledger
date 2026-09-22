@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ['20', '24']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run check-types
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Domain tests (node --test)
+        run: npm run test:domain
+
+      - name: Bundle
+        run: npm run bundle
+
+      - name: Extension tests (@vscode/test-cli, headless)
+        run: xvfb-run -a npm run test:extension
+
+      - name: Verify packaged artifact
+        run: npm run test:package
