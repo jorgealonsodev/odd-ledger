@@ -664,9 +664,38 @@ user's decisions under ordinary repository policy.
       by checksum, including removing the cancel before rescheduling and disposing the
       debounce without its child watchers.
 
-- [ ] T16 Package and document
+- [x] T16 Package and document
       Extension packaging, README, and the settings reference.
-      Route: delegated writer.
+      Route: delegated writer. DONE `aba99fa`.
+      The package carries six files: the manifest, the README, the bundle, the activity
+      bar icon and the one font the webview loads. Everything else is excluded, including
+      the sources, the tests, the fixtures, the local indexes and this `odd/` folder.
+      **The packaging risk this document recorded was real and was met head on.** The
+      codicon font ships only because it is a runtime dependency, so an ignore file that
+      swept the module directory aside would have taken the panel's icons with it and
+      nothing would have failed: no error, no warning, just a panel with blank squares.
+      The proof is therefore taken from the built artifact rather than the working tree,
+      and it is a test rather than a command someone ran once, so the next change to the
+      ignore rules has to keep it true. It was observed failing first: eight of its ten
+      assertions failed before the ignore file existed.
+      The README is written for a first reader. It says what is read, which is the
+      project's `odd/` folder and the git history of the files in it and nothing else, and
+      it gives the non-goals the same weight as the features, because a read-only ledger
+      that never writes, never commits and never runs the workflow is defined as much by
+      what it refuses as by what it shows. The honesty rules are described as behaviour
+      rather than implementation, since they are the product: a checked task with no
+      evidence reads as done but unproven, and what a document does not record is named as
+      not recorded rather than drawn as a zero.
+      **The extension contributes no configuration, and the README says so** instead of
+      printing an empty table. Nothing plausible surfaced that was worth exposing.
+      The manifest needed nothing it did not already have. No licence file was added and
+      the packager still warns about it, because choosing a licence is the repository
+      owner's decision and not this task's.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 212 tests, 211 pass,
+      1 skipped; `npm run test:extension` 82 passing in the no-folder profile and 22 in the
+      workspace profile; `npm run bundle` exit 0; `npm run test:package` 12 of 12; `grep`
+      over `src/domain/` for a `vscode` import returns clean. The parent listed the built
+      package independently and confirmed the font present and nothing private inside.
 
 ### Cleanup pass
 
@@ -775,7 +804,8 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 15 of 24 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 16 of 24 tasks closed.
+**Every feature task is now done.** What remains is the cleanup pass.
 
 | Commit | What |
 |--------|------|
@@ -819,6 +849,10 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 15 of 24 tasks c
 | `c875697` | T14 codicons, high-contrast boundaries and an unclipped chart |
 | `8c8a72e` | T14 recorded as closed; a packaging risk flagged for T16 |
 | `c490f35` | T15 watch the documents and refresh on change |
+| `bb8882e` | T15 recorded as closed with its untested folder-rebuild path |
+| `5b7e2be` | T14/T15 slice correction: the refresh gained a failure path |
+| `b9de37a` | T14/T15 slice review approved and acknowledged |
+| `aba99fa` | T16 packaging, README and the settings reference |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
 | `5b7e2be` | T14/T15 slice review correction: the watcher-driven refresh gets a real failure path |
@@ -942,12 +976,27 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T16, packaging and documentation, once the current slice's review reaches a
-terminal outcome. The cleanup pass (T17 to T24) follows the feature work.
+The feature work is complete. What remains is the cleanup pass, T17 to T24: eight defects
+that approved reviews raised or the parent verified, none of which blocked their review.
+They were moved out of the feature list on 2026-09-22 so the remaining count stopped
+growing faster than it shrank.
 
-T14 and T15 form the current slice, 1166 authored changed lines at medium risk, which
-exceeds the delivery budget and closes it. Its review is the next thing to happen, before
-T16 starts.
+Two things wait on the repository owner. Twenty-three commits sit unpushed on this branch,
+and pushing is theirs to decide. And five non-terminal review lineages have accumulated in
+the store, three of them from the T13 arc including one left escalated after its targeted
+validator rejected a correction; none blocks anything, but they should be disposed of
+deliberately rather than left behind.
+
+**The T14 and T15 slice was reviewed and approved**, lineage `review-5fdd501c4d53856e`,
+one lens. It found one critical defect worth recording for its irony: the watcher-driven
+refresh had no failure path. A document that vanished between the existence check and the
+read, an unreadable file, or a failed git read all produced a rejected promise nobody
+observed while the panel kept showing stale content. A refresh that fails silently
+reinstates exactly the problem T15 exists to remove, and the 309 tests were green
+throughout because none of them exercised a failing read. The correction gave the two
+failures different answers: a document that is gone reuses the absence state, while a
+failed read says the view may be stale and keeps tracking the document so the next change
+retries rather than leaving the panel dead.
 
 Two decisions the user took on 2026-09-22, after asking whether the pace suited a VS Code
 extension: review per slice rather than per task, and defer every open defect to a cleanup
