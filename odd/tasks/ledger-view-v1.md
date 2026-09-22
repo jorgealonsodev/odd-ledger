@@ -72,8 +72,8 @@ overtaken. The delivery budget, not the forecast, is what governs slicing.
 
 ### Slice boundaries
 
-Nothing is pushed yet and no pull request exists. These are the intended boundaries, each
-a coherent piece of behaviour rather than an arbitrary line count.
+The branch is on `origin` since 2026-09-21 and no pull request exists yet. These are the
+intended boundaries, each a coherent piece of behaviour rather than an arbitrary line count.
 
 | Slice | Commits | Holds |
 |-------|---------|-------|
@@ -283,16 +283,15 @@ user's decisions under ordinary repository policy.
       `review-50e3331e6a0cba89`, one lens (`review-reliability`).
       **Approved with zero blocking findings, acknowledged, authority burned.**
 
-- [~] T7 Register the activity bar container, the view, and the welcome content
+- [x] T7 Register the activity bar container, the view, and the welcome content
       `contributes.viewsContainers.activitybar` with id, title and a **24x24 SVG icon**, then
       `contributes.views` under that container id, and a `TreeDataProvider`. The empty state
       uses `contributes.viewsWelcome`, the documented mechanism for a tree view with no
       children — not a hand-rolled placeholder node.
       Route: delegated writer (manifest, icon asset, provider, tests).
-      IMPLEMENTED `ee74937`. **Left open on purpose: its review is due and awaits the
-      user's consent**, which is theirs to give and was not given in their absence. The
-      checkbox stays `[~]` rather than `[x]` until that review reaches a terminal outcome,
-      because this document must not claim a completion its own rules have not granted.
+      CLOSED `ee74937`, review approved and acknowledged on 2026-09-22. It stayed at `[~]`
+      for one day on purpose: its review was due and consent is the user's to give, so the
+      checkbox did not claim a completion the document's own rules had not granted.
       First adapter-layer work: the first code allowed to import `vscode`, and the first
       tested by launching a real extension host. Uses `window.createTreeView` rather than
       `registerTreeDataProvider`, because the unproven badge lives on the `TreeView`
@@ -314,8 +313,12 @@ user's decisions under ordinary repository policy.
       Privacy verified by the parent over `src/adapter/`, `resources/`, the manifest and
       the test configuration: clean.
       Review: RDD assess over `d9a3979..ee74937` returned risk **medium**
-      (`slice_budget_reached`, 492 lines). **Consent not requested — the user was away, and
-      consent is theirs to give.** No lineage was opened.
+      (`slice_budget_reached`, 492 lines). Consent was not requested in the user's absence.
+      On 2026-09-22 the user granted it; the native review ran over `d9a3979..f798fc9`
+      (12 files, 530 lines, one lens, `review-reliability`), returned **approved**, and the
+      exact acknowledgement burned the authority. The closing document commit assessed
+      passive, so the reviewed boundary advanced past it.
+      Ten advisory findings, none blocking, are listed under Progress as follow-ups.
 
 - [ ] T8 Tree view: features, sections, tasks
       State icons, ID as written, `done/total`, the unproven badge, the branch when named,
@@ -399,8 +402,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, nineteen commits. 6 of 17 tasks closed, one implemented
-and awaiting its review.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 7 of 17 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -422,12 +424,12 @@ and awaiting its review.
 | `d9a3979` | T6 synthetic corpus and full-pipeline tests |
 | `288eea6` | Corpus excerpts the first anonymisation pass missed, removed |
 | `ee74937` | T7 activity bar container, view and welcome content |
+| `f798fc9` | T7 recorded as implemented and awaiting its review |
+| next commit | T7 review approved, recorded as closed; this document |
 
-Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast is
-about to be met with twelve tasks still open, so it was low; the delivery budget, not the
-forecast, is what governs, and `ask-on-risk` will request a chain strategy before the next
-slice. Chain strategy still
-unresolved; `ask-on-risk` will request it before the count crosses the budget.
+Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
+low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
+what governs, and the chain strategy is settled as `stacked-to-main` (see Delivery).
 
 A local CodeGraph index was initialized for this checkout: 7 files, 20 nodes, 25 edges.
 It is ignored by git, because an index is per-checkout and its root and indexed bytes
@@ -445,6 +447,20 @@ H1 appearing *after* the first section is currently dropped; and `endLine` is of
 document ending without a trailing newline. From earlier reviews: CI uses unpinned GitHub
 action refs and default token permissions.
 
+**Advisory findings from the T7 review (2026-09-22), none blocking, not yet tasks.** All
+in the adapter layer. Two of them land on tasks already planned and are noted there rather
+than duplicated: the missing folder-change listener and file watcher is T15, and the
+locale-dependent `localeCompare` ordering plus the sort assertion that passes even with the
+sort removed both belong to T9's ordering work. The rest, in the reviewer's severity order:
+a per-document read failure is swallowed and renders as `0/0`, indistinguishable from a
+document with no tasks, and no test reaches that branch; the folder discovery call sits
+outside any failure isolation, so one unreadable folder rejects the whole tree, and no test
+runs with two folders; the refresh command's wiring to the provider is asserted only by
+the command's presence, never by executing it; the provider and its event emitter are never
+disposed. Three suggestions: the welcome text names one cause for a state reached from
+three situations; the shared zero-count constant is returned by reference and not frozen;
+every render does synchronous file reads on the extension host thread.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -452,15 +468,9 @@ ships.
 
 ## Next step
 
-Two things wait on the repository owner, in this order.
+Both decisions that waited on the repository owner are settled: the branch was pushed as
+it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
+the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-**1. Decide what to do about the corpus excerpts in the root commit, then push.** Nothing
-has ever been published: the public remote is still empty. The working tree is clean, but
-`8d2c859` carries a task title and two short commit hashes taken from a surveyed document,
-and `dd6fd03` carries one verbatim heading. Either push as it stands, or rewrite the branch
-first — which would invalidate every commit hash this document records as evidence.
-
-**2. Grant or decline the review of T7**, which is due at medium risk and was not requested
-in the owner's absence.
-
-Then T8: the tree view's feature, section and task nodes.
+Next is T8: the tree view's feature, section and task nodes. The reviewed boundary is the
+commit that records this closure, the last one in the Progress table.
