@@ -22,6 +22,7 @@ import {
   CLI_FLOW_AUDIT,
   MOBILE_ONBOARDING_REVAMP,
   SIGNAGE_DISPLAY_DRIVER,
+  WAREHOUSE_RELABEL_V1,
   SYNTHETIC_DOCUMENTS,
 } from './fixtures/synthetic-documents';
 
@@ -223,6 +224,43 @@ test('mobile-onboarding-revamp: two ID prefixes in one section with a numbering 
   assert.equal(derived.progress.done, 2);
   assert.equal(derived.progress.total, 5);
   assert.equal(derived.progress.percentage, 40);
+});
+
+test('warehouse-relabel-v1: an unterminated fence and a second H1 do not swallow or drop the rest of the document', () => {
+  const structure = parseDocumentStructure(WAREHOUSE_RELABEL_V1.text);
+  const checklist = parseChecklist(WAREHOUSE_RELABEL_V1.text, structure.sections);
+  const derived = deriveChecklistState(checklist);
+
+  assert.equal(structure.title, 'warehouse-relabel-v1');
+  assert.deepEqual(
+    structure.sections.map((s) => [s.heading, s.kind, s.level]),
+    [
+      ['Objective', 'objective', 2],
+      ['Constraints', 'constraints', 2],
+      ['Superseded plan, kept for reference', null, 1],
+      ['Tasks', 'tasks', 2],
+    ],
+  );
+
+  // The unterminated fence's own text survives, as literal content, in the
+  // section that was open when it was opened.
+  assert.match(structure.sections[1].body, /BIN-042 :: SKU 88213/);
+
+  // Constraints itself has no checklist items: the fence's content never
+  // becomes real structure.
+  const constraints = derived.sections.find((s) => s.heading === 'Constraints')!;
+  assert.equal(constraints.items.length, 0);
+
+  // Tasks, which only exists because the fence stopped swallowing the
+  // document, is parsed with both of its real items.
+  const tasks = derived.sections.find((s) => s.heading === 'Tasks')!;
+  assert.deepEqual(
+    tasks.items.map((i) => [i.id, i.derivedState]),
+    [
+      ['W1', 'open'],
+      ['W2', 'done'],
+    ],
+  );
 });
 
 test('signage-display-driver-v1: sparse document with only the four core headings', () => {

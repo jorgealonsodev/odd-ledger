@@ -302,6 +302,49 @@ test('rawText preserves the original literal source lines of the item', () => {
   assert.equal(result[0].items[0].rawText, '- [x] T1 First item\n      Evidence line.');
 });
 
+test('an unterminated code fence does not swallow the rest of the section: an item written after it still parses', () => {
+  const text = [
+    '# doc',
+    '',
+    '## Tasks',
+    '- [x] T1 First item',
+    '',
+    '```',
+    'this fence is never closed',
+    '',
+    '- [ ] T2 Written after the unterminated fence',
+  ].join('\n');
+
+  const result = parse(text);
+
+  assert.deepEqual(result[0].items.map((i) => i.id), ['T1', 'T2']);
+  assert.equal(result[0].items[1].title, 'Written after the unterminated fence');
+});
+
+test('a fence that properly closes, even though it contains a heading and a checklist-shaped line, stays content and adds no items', () => {
+  const text = [
+    '# doc',
+    '',
+    '## Scope',
+    'Example:',
+    '',
+    '```',
+    '## Not a real heading',
+    '- [ ] Not a real task either',
+    '```',
+    '',
+    '## Tasks',
+    '- [x] T1 The only real item',
+  ].join('\n');
+
+  const result = parse(text);
+
+  const scope = result.find((s) => s.heading === 'Scope')!;
+  assert.equal(scope.items.length, 0);
+  const tasks = result.find((s) => s.heading === 'Tasks')!;
+  assert.deepEqual(tasks.items.map((i) => i.id), ['T1']);
+});
+
 test('an informal prose label between runs of items is not attached to the previous item as evidence', () => {
   const text = [
     '# doc',

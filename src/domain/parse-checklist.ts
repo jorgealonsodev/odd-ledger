@@ -109,7 +109,40 @@ function splitLines(text: string): string[] {
   if (text.length === 0) {
     return [];
   }
-  return text.split(/\r\n|\r|\n/);
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines[lines.length - 1] === '') {
+    // Mirrors parseDocumentStructure's own splitLines: a trailing line
+    // terminator ends the last physical line rather than opening an empty
+    // one after it, and String.split otherwise leaves a spurious empty
+    // final element for a document saved with a trailing newline.
+    lines.pop();
+  }
+  return lines;
+}
+
+/**
+ * Whether a fence opened with `fenceChar`/`fenceLen` closes anywhere in
+ * `lines` within [`fromLine`, `toLine`] (1-based, inclusive). Mirrors
+ * parseDocumentStructure's hasClosingFence: an opening fence with no
+ * matching close before the end of its section is treated as not a fence
+ * at all, so it cannot swallow the rest of the section's checklist items.
+ * A well-formed, properly closed fence is completely unaffected.
+ */
+function hasClosingFence(
+  lines: readonly string[],
+  fromLine: number,
+  toLine: number,
+  fenceChar: string,
+  fenceLen: number,
+): boolean {
+  for (let ln = fromLine; ln <= toLine; ln++) {
+    const trimmed = (lines[ln - 1] ?? '').trim();
+    const match = FENCE_CLOSE_RE.exec(trimmed);
+    if (match && match[1][0] === fenceChar && match[1].length >= fenceLen) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function classifyMarker(rawMarker: string): ChecklistItemState {
@@ -194,9 +227,12 @@ interface OpenItem {
  * document for checklist items. Blank lines mid-continuation are tolerated;
  * a fenced code block at top level (0-3 space indent) suppresses item
  * matching inside it, exactly like parseDocumentStructure does for
- * headings; a fenced code block nested under an item's own continuation
- * indentation is simply carried along as continuation text, since it never
- * matches the item-start pattern at that depth.
+ * headings, but only when that fence actually closes before endLine (see
+ * hasClosingFence): an unterminated fence is not treated as a fence at
+ * all, so it cannot swallow the rest of the section's items. A fenced code
+ * block nested under an item's own continuation indentation is simply
+ * carried along as continuation text, since it never matches the
+ * item-start pattern at that depth.
  */
 function parseSectionItems(lines: readonly string[], startLine: number, endLine: number): ChecklistItem[] {
   const items: ChecklistItem[] = [];
@@ -241,14 +277,22 @@ function parseSectionItems(lines: readonly string[], startLine: number, endLine:
 
     const fenceOpenMatch = FENCE_OPEN_RE.exec(line);
     if (fenceOpenMatch) {
-      inFence = true;
-      fenceChar = fenceOpenMatch[1][0];
-      fenceLen = fenceOpenMatch[1].length;
-      if (current) {
-        current.evidenceParts.push(line);
-        current.lastContentLine = ln;
+      const candidateChar = fenceOpenMatch[1][0];
+      const candidateLen = fenceOpenMatch[1].length;
+      if (hasClosingFence(lines, ln + 1, endLine, candidateChar, candidateLen)) {
+        inFence = true;
+        fenceChar = candidateChar;
+        fenceLen = candidateLen;
+        if (current) {
+          current.evidenceParts.push(line);
+          current.lastContentLine = ln;
+        }
+        continue;
       }
-      continue;
+      // No closing fence exists before this section ends: this marker
+      // never actually opens a fenced block (see hasClosingFence above),
+      // so fall through and let the rest of the loop read this line
+      // normally instead of swallowing every item after it.
     }
 
     const itemMatch = ITEM_START_RE.exec(line);

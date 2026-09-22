@@ -374,10 +374,60 @@ export const SIGNAGE_DISPLAY_DRIVER: SyntheticDocument = {
   ].join('\n'),
 };
 
+/**
+ * A fictional warehouse relabeling feature: the deliberately malformed
+ * document.
+ *
+ * Covers:
+ * - An unterminated code fence under `## Constraints`: never closed before
+ *   the document ends. Everything after it — the `## Tasks` heading and
+ *   its item — must still parse as real structure, not be swallowed into
+ *   `Constraints`.
+ * - A second H1 (`# Superseded plan, kept for reference`) appearing after
+ *   the first section, which must be preserved as its own section rather
+ *   than folded into whatever section precedes it.
+ * - No trailing newline (`.join('\n')` never appends one), matching the
+ *   grammar variety this corpus otherwise leaves implicit.
+ */
+export const WAREHOUSE_RELABEL_V1: SyntheticDocument = {
+  id: 'warehouse-relabel-v1',
+  featureName: 'warehouse-relabel-v1',
+  summary: 'Relabel warehouse bins from the new SKU map instead of the retired one.',
+  variants: ['unterminated-code-fence', 'h1-after-first-section', 'no-trailing-newline'],
+  text: [
+    '# warehouse-relabel-v1',
+    '',
+    '## Objective',
+    '',
+    'Relabel every warehouse bin from the new SKU map before the old one is',
+    'retired, instead of leaving pickers to reconcile two conflicting labels.',
+    '',
+    '## Constraints',
+    '',
+    'The old label format looked like this:',
+    '',
+    '```',
+    'BIN-042 :: SKU 88213 (legacy format, never closed below on purpose)',
+    '',
+    '# Superseded plan, kept for reference',
+    '',
+    'An earlier plan relabeled bins by hand, one aisle at a time. It was',
+    'abandoned once the SKU map export became available.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] W1 Generate the relabel batch from the new SKU map',
+    '',
+    '- [x] W2 Print and apply the first aisle as a pilot',
+    '      DONE `2b6f0a1`.',
+  ].join('\n'),
+};
+
 /** Every synthetic document, for corpus-wide smoke checks. */
 export const SYNTHETIC_DOCUMENTS: readonly SyntheticDocument[] = [
   CACHE_WARM_V2,
   CLI_FLOW_AUDIT,
   MOBILE_ONBOARDING_REVAMP,
   SIGNAGE_DISPLAY_DRIVER,
+  WAREHOUSE_RELABEL_V1,
 ];

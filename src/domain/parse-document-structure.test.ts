@@ -303,3 +303,104 @@ test('reports accurate heading and end line numbers per section', () => {
   assert.equal(result.sections[1].headingLine, 7);
   assert.equal(result.sections[1].endLine, 8);
 });
+
+test('endLine does not drift for a document with no trailing newline, and stays the same for its trailing-newline twin', () => {
+  const withoutTrailingNewline = [
+    '## Tasks', // line 1
+    '- [ ] T1 Do it', // line 2
+  ].join('\n');
+  const withTrailingNewline = withoutTrailingNewline + '\n';
+
+  const withoutResult = parseDocumentStructure(withoutTrailingNewline);
+  const withResult = parseDocumentStructure(withTrailingNewline);
+
+  // The document has no trailing newline: line 2 is genuinely the last
+  // physical line, and endLine must land exactly there.
+  assert.equal(withoutResult.sections[0].endLine, 2);
+  // Saving the identical document with one trailing newline appended (the
+  // git-tracked-file convention) must not change what line the section
+  // ends on: a trailing newline terminates line 2, it does not open a
+  // line 3.
+  assert.equal(withResult.sections[0].endLine, 2);
+});
+
+test('an unterminated code fence does not swallow the rest of the document: a later heading and its content still parse', () => {
+  const text = [
+    '# w-doc',
+    '',
+    '## Constraints',
+    'Run this:',
+    '',
+    '```bash',
+    'echo "this fence is never closed"',
+    '',
+    '## Tasks',
+    '- [ ] T1 Do it',
+  ].join('\n');
+
+  const result = parseDocumentStructure(text);
+
+  assert.deepEqual(
+    result.sections.map((s) => s.heading),
+    ['Constraints', 'Tasks'],
+  );
+  // Nothing is silently discarded: the unclosed fence marker and the shell
+  // line both remain, as literal text, in the section that was open when
+  // the fence opened.
+  assert.match(result.sections[0].body, /```bash/);
+  assert.match(result.sections[0].body, /echo "this fence is never closed"/);
+  // And the heading that follows is recognized as a real section, with its
+  // own checklist item intact, rather than being folded into Constraints.
+  assert.match(result.sections[1].body, /- \[ \] T1 Do it/);
+});
+
+test('a fence that properly closes, even though it contains a heading-shaped line, still stays content and opens no section', () => {
+  const text = [
+    '# x-doc',
+    '',
+    '## Scope',
+    'Format example:',
+    '',
+    '```',
+    '## Not a real heading',
+    '- [ ] Not a real task either',
+    '```',
+    '',
+    '## Tasks',
+    '- [ ] T1 Do it',
+  ].join('\n');
+
+  const result = parseDocumentStructure(text);
+
+  assert.deepEqual(
+    result.sections.map((s) => s.heading),
+    ['Scope', 'Tasks'],
+  );
+  assert.match(result.sections[0].body, /## Not a real heading/);
+});
+
+test('an H1 appearing after the first section is preserved as its own section rather than folded into the current one', () => {
+  const text = [
+    '# v-doc',
+    '',
+    '## Constraints',
+    'Read-only.',
+    '',
+    '# Unexpected second title',
+    '',
+    '## Tasks',
+    '- [ ] T1 Do it',
+  ].join('\n');
+
+  const result = parseDocumentStructure(text);
+
+  assert.equal(result.title, 'v-doc');
+  assert.deepEqual(
+    result.sections.map((s) => [s.heading, s.level]),
+    [
+      ['Constraints', 2],
+      ['Unexpected second title', 1],
+      ['Tasks', 2],
+    ],
+  );
+});

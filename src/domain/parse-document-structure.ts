@@ -43,8 +43,11 @@ export interface DocumentSection {
   /** The canonical kind resolved via the alias table, or `null` when the
    * heading is not recognized. An unrecognized section is still returned. */
   readonly kind: SectionKind | null;
-  /** The heading level, i.e. the number of `#` characters. Always 2 today:
-   * see the module-level note on deeper headings. */
+  /** The heading level, i.e. the number of `#` characters. Almost always 2;
+   * it is 1 only for a second (or later) H1 found after the document's
+   * title, which is preserved as its own section rather than folded into
+   * another one's body — see the module-level note on deeper headings for
+   * why level 3-6 never appears here. */
   readonly level: number;
   /** The section body: every line between this heading and the next section
    * boundary (or the end of the document), including any deeper headings
@@ -134,7 +137,43 @@ function splitLines(text: string): string[] {
   if (text.length === 0) {
     return [];
   }
-  return text.split(/\r\n|\r|\n/);
+  const lines = text.split(/\r\n|\r|\n/);
+  if (lines[lines.length - 1] === '') {
+    // A trailing line terminator ends the document's last physical line;
+    // it does not open an empty one after it (this is how VS Code's own
+    // line model counts lines). String.split leaves a spurious empty
+    // final element whenever the text ends in \r\n, \r or \n, which would
+    // otherwise inflate endLine by one for every document saved with a
+    // trailing newline — the common case for a file tracked in git.
+    // Dropping it here keeps endLine anchored to the real last line
+    // regardless of whether the source has a trailing newline.
+    lines.pop();
+  }
+  return lines;
+}
+
+/**
+ * Whether a fence opened with `fenceChar`/`fenceLen` closes anywhere in
+ * `lines` from `fromIndex` onward. Per CommonMark, an opening fence with no
+ * matching close before the end of input still starts a code block that
+ * runs to the end of the document — but treating it that way here would
+ * silently fold every later heading and checklist item into whatever
+ * section happened to be open, which is unacceptable for a ledger whose
+ * only job is to show a document's real content. Checking for an actual
+ * close before committing to fence mode means every well-formed fence
+ * (including one that legitimately contains a Markdown example with its
+ * own headings, as this corpus does) parses exactly as before: this only
+ * ever changes behavior for a fence that truly never closes.
+ */
+function hasClosingFence(lines: readonly string[], fromIndex: number, fenceChar: string, fenceLen: number): boolean {
+  for (let i = fromIndex; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    const match = /^(`{3,}|~{3,})$/.exec(trimmed);
+    if (match && match[1][0] === fenceChar && match[1].length >= fenceLen) {
+      return true;
+    }
+  }
+  return false;
 }
 
 interface OpenSection {
@@ -202,11 +241,19 @@ export function parseDocumentStructure(text: string): DocumentStructure {
 
     const fenceOpenMatch = FENCE_OPEN_RE.exec(line);
     if (fenceOpenMatch) {
-      inFence = true;
-      fenceChar = fenceOpenMatch[1][0];
-      fenceLen = fenceOpenMatch[1].length;
-      appendBodyLine(line);
-      continue;
+      const candidateChar = fenceOpenMatch[1][0];
+      const candidateLen = fenceOpenMatch[1].length;
+      if (hasClosingFence(lines, i + 1, candidateChar, candidateLen)) {
+        inFence = true;
+        fenceChar = candidateChar;
+        fenceLen = candidateLen;
+        appendBodyLine(line);
+        continue;
+      }
+      // No closing fence exists anywhere later in the document: this
+      // marker never actually opens a fenced block (see hasClosingFence
+      // above), so fall through and parse the rest of the line normally
+      // instead of swallowing everything after it as body text.
     }
 
     const headingMatch = HEADING_RE.exec(line);
@@ -221,7 +268,13 @@ export function parseDocumentStructure(text: string): DocumentStructure {
         continue;
       }
 
-      if (level === 2) {
+      if (level === 1 || level === 2) {
+        // A second (or later) H1 is unexpected — the document format
+        // assumes exactly one title — but it is still a real heading, not
+        // prose, and this parser's convention is that an unexpected thing
+        // is preserved, never folded silently into whatever section
+        // happens to be open. It gets the same section treatment as a
+        // `##` heading, so it stays visible in the parsed structure.
         finalizeCurrentSection(lineNumber - 1);
         currentSection = {
           heading: rawText,
@@ -233,9 +286,9 @@ export function parseDocumentStructure(text: string): DocumentStructure {
         continue;
       }
 
-      // A level-1 heading found after the title, or a level 3-6 heading,
-      // does not open a new section: see the module-level note on why
-      // deeper headings stay in their parent's body.
+      // A level 3-6 heading does not open a new section: see the
+      // module-level note on why deeper headings stay in their parent's
+      // body.
       appendBodyLine(line);
       continue;
     }
