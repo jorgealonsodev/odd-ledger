@@ -1,7 +1,9 @@
 # alpha-widget-cache
 
-Synthetic fixture for adapter-layer tests (T7). Invented content only — no
-real project data.
+Synthetic fixture for adapter-layer tests (T7, extended in T8). Invented
+content only — no real project data.
+
+Branch: feat/alpha-widget-cache
 
 ## Objective
 
@@ -24,3 +26,7 @@ None recorded.
       DONE `5d6e7f8`
 
 - [ ] T3 Add a TTL eviction policy
+
+## Next step
+
+Add the TTL eviction policy, then re-measure cold-start latency.

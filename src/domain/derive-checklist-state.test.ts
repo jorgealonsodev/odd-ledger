@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDocumentStructure } from './parse-document-structure';
 import { parseChecklist } from './parse-checklist';
-import { deriveChecklistState, hasCommitReference } from './derive-checklist-state';
+import { deriveChecklistState, extractCommitReference, hasCommitReference } from './derive-checklist-state';
 import type { ChecklistSection, ChecklistItem, ChecklistItemState } from './parse-checklist';
 
 /**
@@ -79,6 +79,31 @@ test('hasCommitReference does not match a hex-looking fragment embedded in a lon
   // word; the trailing "own" keeps a word boundary from ever closing after
   // a hex run, so this must not be read as a reference.
   assert.equal(hasCommitReference('The panel renders facedown until the toggle is clicked.'), false);
+});
+
+// --- extractCommitReference ------------------------------------------
+
+test('extractCommitReference returns the first hex token when one is present', () => {
+  assert.equal(extractCommitReference('DONE 9f8e7d6'), '9f8e7d6');
+});
+
+test('extractCommitReference returns the first of two hex tokens, not the second', () => {
+  assert.equal(extractCommitReference('Superseded 1234567 by a1b2c3d.'), '1234567');
+});
+
+test('extractCommitReference returns null when no hex token is present', () => {
+  assert.equal(extractCommitReference('Reviewed the constraints section and found it accurate.'), null);
+});
+
+test('extractCommitReference returns null for an all-letter hex-shaped word with no digit', () => {
+  assert.equal(extractCommitReference('the placeholder token deadbeef appears here'), null);
+});
+
+test('hasCommitReference and extractCommitReference agree: true iff non-null', () => {
+  const withRef = 'Corrected by `a1b2c3d`.';
+  const withoutRef = 'deadbeef is not a hash.';
+  assert.equal(hasCommitReference(withRef), extractCommitReference(withRef) !== null);
+  assert.equal(hasCommitReference(withoutRef), extractCommitReference(withoutRef) !== null);
 });
 
 // --- done-unproven -------------------------------------------------------

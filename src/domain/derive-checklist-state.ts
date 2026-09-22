@@ -127,12 +127,23 @@ const HEX_TOKEN_RE = /\b[0-9a-f]{7,40}\b/gi;
  * including short 7-character hashes and full 40-character ones.
  */
 export function hasCommitReference(text: string): boolean {
+  return extractCommitReference(text) !== null;
+}
+
+/**
+ * Returns the first commit-shaped hex token found in `text`, or `null` when
+ * none is present. Shares the exact rule `hasCommitReference` uses (see its
+ * doc comment for why the digit requirement matters) so a caller that needs
+ * the literal token — e.g. to show it as a task's commit reference — never
+ * has to re-implement or re-derive it from a boolean.
+ */
+export function extractCommitReference(text: string): string | null {
   for (const match of text.matchAll(HEX_TOKEN_RE)) {
     if (/[0-9]/.test(match[0])) {
-      return true;
+      return match[0];
     }
   }
-  return false;
+  return null;
 }
 
 const PROGRESS_KINDS: ReadonlySet<SectionKind | null> = new Set<SectionKind | null>(['tasks', null]);

@@ -1,24 +1,24 @@
 /**
  * The tree view's data provider: the first adapter-layer module, and the
  * first allowed to import `vscode`. It is a thin translation layer only —
- * it asks the domain layer (discovery, structure parsing, checklist
- * parsing, derived state) for data and turns the result into `TreeItem`s.
- * Any logic worth testing without an editor stays in src/domain/, not
- * here.
+ * it asks the domain layer (discovery, and now buildFeatureModel, which
+ * itself composes structure parsing, checklist parsing and derived state)
+ * for data and turns the result into `TreeItem`s. Any logic worth testing
+ * without an editor stays in src/domain/, not here.
  *
- * T7 renders one flat level: a node per discovered feature document,
- * showing its name and its done/total counts. Sections and task nodes
- * nest under a feature starting in T8.
+ * T8 introduces the real hierarchy: feature -> section -> task, plus a
+ * next-step leaf pinned as the feature's last child. Filter, ordering of
+ * closed features, and reveal-on-click are T9's job; the detail panel is
+ * T10-T12; the file watcher is T15.
  */
 
 import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
-import { deriveChecklistState } from '../domain/derive-checklist-state';
-import type { ChecklistCounts } from '../domain/derive-checklist-state';
+import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
+import { buildFeatureModel } from '../domain/build-feature-model';
+import type { ChecklistCounts, DerivedItemState } from '../domain/derive-checklist-state';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
-import { parseChecklist } from '../domain/parse-checklist';
-import { parseDocumentStructure } from '../domain/parse-document-structure';
 
 /** Counts reported when a document cannot be read or parsed: the same
  * "nothing found" shape production code already understands, rather than
@@ -26,32 +26,182 @@ import { parseDocumentStructure } from '../domain/parse-document-structure';
 const EMPTY_COUNTS: ChecklistCounts = { done: 0, total: 0, percentage: 0, doneUnproven: 0 };
 
 /**
- * One feature document rendered as a tree node. Today it is always a
- * leaf: sections and tasks are T8's job, and adding a real child level
- * later is what turns `collapsibleState` from `None` into `Collapsed`.
+ * A FeatureModel standing in for a document that could not be read or
+ * parsed (deleted between discovery and render, permissions, and so on).
+ * The tree keeps rendering the rest of the project rather than throwing;
+ * this is the same absence-shaped fallback T7's EMPTY_COUNTS was, widened
+ * to the full model T8 now needs.
  */
-export class FeatureTreeItem extends vscode.TreeItem {
-  constructor(
-    public readonly featureName: string,
-    public readonly documentPath: string,
-    public readonly counts: ChecklistCounts,
-  ) {
-    super(featureName, vscode.TreeItemCollapsibleState.None);
-    this.description = `${counts.done}/${counts.total}`;
-    this.tooltip = `${featureName} — ${counts.done}/${counts.total} tasks done`;
+function emptyFeatureModel(featureName: string, documentPath: string): FeatureModel {
+  return {
+    featureName,
+    documentPath,
+    title: null,
+    branch: null,
+    progress: EMPTY_COUNTS,
+    sections: [],
+    nextStep: null,
+  };
+}
+
+/** The union of every node kind the tree can show. `getParent` and
+ * `getChildren` both switch on `kind` rather than `instanceof`, so the
+ * discriminant is explicit and does not rely on prototype identity. */
+export type LedgerTreeNode = FeatureNode | SectionNode | TaskNode | NextStepNode;
+
+function formatFeatureDescription(model: FeatureModel): string {
+  const counts = model.progress;
+  let description = `${counts.done}/${counts.total}`;
+  if (counts.doneUnproven > 0) {
+    description += ` · ${counts.doneUnproven} unproven`;
+  }
+  if (model.branch) {
+    description += ` · ${model.branch}`;
+  }
+  return description;
+}
+
+function formatFeatureTooltip(model: FeatureModel): string {
+  const counts = model.progress;
+  const branchText = model.branch ? `branch ${model.branch}` : 'no branch recorded';
+  let tooltip = `${model.featureName} — ${counts.done}/${counts.total} tasks done, ${branchText}`;
+  if (counts.doneUnproven > 0) {
+    tooltip += `, ${counts.doneUnproven} unproven`;
+  }
+  return tooltip;
+}
+
+/**
+ * One feature document rendered as the tree's root node for that feature.
+ * Its children are its item-bearing sections, plus a trailing next-step
+ * node when the document records one (see FeatureTreeDataProvider).
+ */
+export class FeatureNode extends vscode.TreeItem {
+  readonly kind = 'feature' as const;
+  /** A feature is always a root node: there is nothing above it in this
+   * tree. Kept as an explicit field (rather than left off the type) so
+   * every LedgerTreeNode has a uniform `.parent`, which is exactly what
+   * getParent needs to stay a one-line lookup. */
+  readonly parent: undefined = undefined;
+
+  constructor(public readonly model: FeatureModel) {
+    super(model.featureName, vscode.TreeItemCollapsibleState.Expanded);
+    this.description = formatFeatureDescription(model);
+    this.tooltip = formatFeatureTooltip(model);
+    this.iconPath = new vscode.ThemeIcon('checklist');
     this.contextValue = 'oddLedger.feature';
   }
 }
 
 /**
- * Supplies the ODD Ledger tree: one node per feature document discovered
- * under every open workspace folder's `odd/tasks/`.
+ * One `##` section that holds at least one checklist item (see
+ * buildFeatureModel's section filter — a prose-only section never reaches
+ * this layer at all). Its children are its task nodes.
+ */
+export class SectionNode extends vscode.TreeItem {
+  readonly kind = 'section' as const;
+
+  constructor(
+    public readonly model: SectionModel,
+    public readonly parent: FeatureNode,
+  ) {
+    super(model.heading, vscode.TreeItemCollapsibleState.Expanded);
+    this.description = `${model.counts.done}/${model.counts.total}`;
+    this.iconPath = new vscode.ThemeIcon('list-unordered');
+    this.contextValue = 'oddLedger.section';
+  }
+}
+
+const STATE_ICON_ID: Record<DerivedItemState, string> = {
+  open: 'circle-large-outline',
+  done: 'pass',
+  'done-unproven': 'warning',
+  declined: 'circle-slash',
+  unknown: 'question',
+};
+
+/** A short, human-readable description of a derived state, used as a
+ * task's tooltip only when it records no evidence text of its own. */
+const STATE_TOOLTIP_TEXT: Record<DerivedItemState, string> = {
+  open: 'open',
+  done: 'done',
+  'done-unproven': 'checked, no evidence recorded',
+  declined: 'declined',
+  unknown: 'unknown state',
+};
+
+function formatTaskLabel(model: ItemModel): string {
+  return model.id ? `${model.id} ${model.title}` : model.title;
+}
+
+/** The commit reference when present; the honest "unproven" text for a
+ * done-unproven item; otherwise no description at all (`undefined`, not an
+ * empty string, so VS Code renders nothing rather than a stray space). */
+function formatTaskDescription(model: ItemModel): string | undefined {
+  if (model.derivedState === 'done-unproven') {
+    return 'checked, no evidence recorded';
+  }
+  return model.commitReference ?? undefined;
+}
+
+function formatTaskTooltip(model: ItemModel): string {
+  return model.evidence.trim().length > 0 ? model.evidence : STATE_TOOLTIP_TEXT[model.derivedState];
+}
+
+/**
+ * One checklist item rendered as a leaf. VS Code's TreeItem has only one
+ * description line, not a second one of its own: `description` here is the
+ * honest equivalent of the PRD's "commit reference on a second line" for
+ * this API, not a literal second line.
+ */
+export class TaskNode extends vscode.TreeItem {
+  readonly kind = 'task' as const;
+  readonly documentPath: string;
+  readonly startLine: number;
+
+  constructor(
+    public readonly model: ItemModel,
+    public readonly parent: SectionNode,
+    documentPath: string,
+  ) {
+    super(formatTaskLabel(model), vscode.TreeItemCollapsibleState.None);
+    this.documentPath = documentPath;
+    this.startLine = model.startLine;
+    this.iconPath = new vscode.ThemeIcon(STATE_ICON_ID[model.derivedState]);
+    this.description = formatTaskDescription(model);
+    this.tooltip = formatTaskTooltip(model);
+    this.contextValue = 'oddLedger.task';
+  }
+}
+
+/**
+ * The document's `## Next step` line, pinned as the last child of its
+ * feature node (see FeatureTreeDataProvider.getChildren). Always a leaf.
+ */
+export class NextStepNode extends vscode.TreeItem {
+  readonly kind = 'nextStep' as const;
+
+  constructor(
+    public readonly model: NextStepModel,
+    public readonly parent: FeatureNode,
+  ) {
+    super(`Next: ${model.line}`, vscode.TreeItemCollapsibleState.None);
+    this.iconPath = new vscode.ThemeIcon('arrow-right');
+    this.tooltip = model.line;
+    this.contextValue = 'oddLedger.nextStep';
+  }
+}
+
+/**
+ * Supplies the ODD Ledger tree: one FeatureNode per feature document
+ * discovered under every open workspace folder's `odd/tasks/`, each
+ * expanding into its item-bearing sections and, last, its next-step node.
  *
  * Multi-root decision: a feature is not scoped to "its" folder in this
  * view. Every open workspace folder is scanned with the same domain-layer
  * discovery function, and every feature document found in any of them
- * becomes a node in one flat, alphabetically sorted list — there is no
- * per-folder grouping level, because nothing in the interface calls for
+ * becomes a root node in one flat, alphabetically sorted list — there is
+ * no per-folder grouping level, because nothing in the interface calls for
  * one and a typical project has one or two features total, not per
  * folder.
  *
@@ -62,9 +212,9 @@ export class FeatureTreeItem extends vscode.TreeItem {
  * `contributes.viewsWelcome` content — the view does not try to explain
  * *why* nothing was found, only that nothing was.
  */
-export class FeatureTreeDataProvider implements vscode.TreeDataProvider<FeatureTreeItem> {
+export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTreeNode> {
   private readonly changeEmitter = new vscode.EventEmitter<
-    void | FeatureTreeItem | FeatureTreeItem[] | null | undefined
+    void | LedgerTreeNode | LedgerTreeNode[] | null | undefined
   >();
 
   readonly onDidChangeTreeData = this.changeEmitter.event;
@@ -74,59 +224,65 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<FeatureT
     this.changeEmitter.fire();
   }
 
-  getTreeItem(element: FeatureTreeItem): vscode.TreeItem {
+  getTreeItem(element: LedgerTreeNode): vscode.TreeItem {
     return element;
   }
 
-  getChildren(element?: FeatureTreeItem): FeatureTreeItem[] {
-    if (element) {
-      // Flat list today: sections and tasks are T8.
-      return [];
+  getChildren(element?: LedgerTreeNode): LedgerTreeNode[] {
+    if (!element) {
+      return this.discoverFeatures();
     }
-    return this.discoverFeatures();
+    if (element.kind === 'feature') {
+      return this.childrenOfFeature(element);
+    }
+    if (element.kind === 'section') {
+      return element.model.items.map((item) => new TaskNode(item, element, element.parent.model.documentPath));
+    }
+    // Task and next-step nodes are leaves.
+    return [];
   }
 
-  getParent(_element: FeatureTreeItem): undefined {
-    // Every node currently rendered is a root-level feature: there is no
-    // deeper level until T8 introduces sections and tasks. Implemented
-    // (rather than left undefined) because the reveal API T9 needs
-    // requires a real getParent, even one that always answers "no parent".
-    return undefined;
+  getParent(element: LedgerTreeNode): LedgerTreeNode | undefined {
+    return element.parent;
   }
 
-  private discoverFeatures(): FeatureTreeItem[] {
+  private childrenOfFeature(feature: FeatureNode): LedgerTreeNode[] {
+    const children: LedgerTreeNode[] = feature.model.sections.map((section) => new SectionNode(section, feature));
+    if (feature.model.nextStep) {
+      // Pinned last, per the PRD: "the single most useful line for
+      // resuming, so it is visible without opening anything" reads best
+      // as the final thing in the list, not the first.
+      children.push(new NextStepNode(feature.model.nextStep, feature));
+    }
+    return children;
+  }
+
+  private discoverFeatures(): FeatureNode[] {
     const folders = vscode.workspace.workspaceFolders ?? [];
-    const items: FeatureTreeItem[] = [];
+    const items: FeatureNode[] = [];
 
     for (const folder of folders) {
       for (const document of discoverFeatureDocuments(folder.uri.fsPath)) {
-        items.push(this.toTreeItem(document));
+        items.push(new FeatureNode(this.readModel(document)));
       }
     }
 
-    items.sort((a, b) => a.featureName.localeCompare(b.featureName));
+    items.sort((a, b) => a.model.featureName.localeCompare(b.model.featureName));
     return items;
   }
 
-  private toTreeItem(document: DiscoveredFeatureDocument): FeatureTreeItem {
-    return new FeatureTreeItem(document.featureName, document.path, this.readCounts(document.path));
-  }
-
   /**
-   * Reads and runs a feature document through the domain pipeline
-   * (structure, checklist, derived state) to get its progress counts.
-   * A document that cannot be read (deleted between discovery and render,
-   * permissions, and so on) reports empty counts rather than throwing:
-   * the tree must keep rendering the rest of the project.
+   * Reads a feature document and composes it into a FeatureModel via the
+   * domain layer's buildFeatureModel. A document that cannot be read
+   * reports the empty model rather than throwing: the tree must keep
+   * rendering the rest of the project.
    */
-  private readCounts(path: string): ChecklistCounts {
+  private readModel(document: DiscoveredFeatureDocument): FeatureModel {
     try {
-      const text = readFileSync(path, 'utf-8');
-      const structure = parseDocumentStructure(text);
-      const checklist = parseChecklist(text, structure.sections);
-      return deriveChecklistState(checklist).progress;
+      const text = readFileSync(document.path, 'utf-8');
+      return buildFeatureModel(document.featureName, document.path, text);
     } catch {
-      return EMPTY_COUNTS;
+      return emptyFeatureModel(document.featureName, document.path);
     }
   }
 }
