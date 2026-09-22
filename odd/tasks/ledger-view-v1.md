@@ -438,10 +438,38 @@ user's decisions under ordinary repository policy.
       authority burned.** Seven advisory findings; two describe real defects and are raised
       as T19 and T20 below.
 
-- [ ] T10 Detail panel: header and tiles
+- [x] T10 Detail panel: header and tiles
       Title from the filename, subtitle with project, path and branch, the Next step block
       rendered first, and the three tiles `PROGRESS`, `UNPROVEN`, `LAST WORK`.
-      Route: delegated writer.
+      Route: delegated writer. Trigger evidence: 11 files, two new domain modules.
+      DONE `934a288`.
+      The panel is one reused webview, not one per feature: opening a second feature
+      re-renders the existing one, and disposal clears the cached reference so a later
+      open builds a fresh panel instead of reaching for a disposed one.
+      The title comes from the filename, never from the document's H1, because the survey
+      found H1 wording varies too much between documents to carry a title.
+      **Absence is a value, not a blank.** A feature with no countable items reports that
+      progress is `not recorded` rather than `0/0 · 0%`, because zero items is the absence
+      of measured progress and not a measurement of zero. `LAST WORK` says the same until
+      T13 fills it, through a documented seam rather than a placeholder.
+      **Everything the panel renders comes from a file on disk**, so every interpolated
+      value passes through an escaping helper that lives in the domain layer and is unit
+      tested there. The webview runs with scripts off and a content policy that denies
+      everything except one nonce-scoped stylesheet.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 151 tests, 150 pass,
+      1 skipped; `npm run test:extension` 43 passing in the no-folder profile and 16 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean. RED observed first as `TS2307` on each missing module in turn.
+      Three panel behaviours that passed on their first run were falsified one at a time —
+      removing the reuse branch's return, emptying the disposal handler, and unescaping the
+      title — each failing only its own test, then reverted and confirmed byte-identical by
+      checksum.
+      Review: RDD assess over `6e7db0b..934a288` returned risk **medium** (configuration
+      change in `package.json`, 708 lines, slice budget reached). Consent granted by the
+      user. Lineage `review-7d9e677a8032a4c7`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.** Eight
+      advisory findings; five live in the module T11 extends and are folded into it rather
+      than deferred, the rest are recorded under Progress.
 
 - [ ] T11 Detail panel: body
       Objective and problem, every task with its evidence inline, an unproven task stating
@@ -509,7 +537,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 9 of 20 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 10 of 20 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -536,6 +564,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 9 of 20 tasks cl
 | `218c8a5` | T8 feature, section, task and next-step nodes |
 | `aca1fb7` | T8 review approved, recorded as closed; T18 raised |
 | `77b3ad8` | T9 filter, ordering and reveal-on-click |
+| `6e7db0b` | T9 review approved, recorded as closed; T19 and T20 raised |
+| `934a288` | T10 detail panel header and tiles |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -593,6 +623,19 @@ keeps its unfiltered counts, which is the deliberate feature-level rule applied 
 down but neither documented nor asserted there; and the active filter is not observable
 anywhere in the interface, so the toolbar gives no feedback about which one is on.
 
+**Advisory findings from the T10 review (2026-09-22), none blocking.** Five are folded
+into T11, which extends the same module: a panel test whose subtitle assertion cannot fail
+because its fixture path does not sit under the workspace root it passes in; the reuse
+path setting the tab title unconditionally while the creation path substitutes a fallback;
+the next-step region's non-empty branch reached by no test; the `openFeature` handler
+asserted nowhere, so its no-argument guard and workspace-folder resolution are unproved;
+and nothing asserting that the nonce in the content policy matches the one on the style
+element, which is also where the nonce moves off `Math.random`. Three remain: a disposal
+callback that clears the current panel unconditionally rather than only when the disposed
+panel is still the current one; a fallback that names the document's own directory as the
+project when no workspace folder resolves; and a command invokable from the palette, where
+its guard returns silently with no feedback.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -604,5 +647,6 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T10: the detail panel's header and tiles. The reviewed boundary is the commit that
-records this closure, the last one in the Progress table.
+Next is T11: the detail panel's body, which also closes five findings the T10 review left
+in that module. The reviewed boundary is the commit that records this closure, the last one
+in the Progress table.
