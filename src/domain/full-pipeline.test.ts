@@ -23,6 +23,7 @@ import {
   MOBILE_ONBOARDING_REVAMP,
   SIGNAGE_DISPLAY_DRIVER,
   WAREHOUSE_RELABEL_V1,
+  CONVEYOR_SORT_ROUTING_V1,
   SYNTHETIC_DOCUMENTS,
 } from './fixtures/synthetic-documents';
 
@@ -291,4 +292,57 @@ test('signage-display-driver-v1: sparse document with only the four core heading
   assert.equal(derived.progress.done, 2);
   assert.equal(derived.progress.total, 3);
   assert.equal(derived.progress.percentage, 67);
+});
+
+test('conveyor-sort-routing-v1: two sections, a mixed-prefix gap, and an identifier scoped per section', () => {
+  const structure = parseDocumentStructure(CONVEYOR_SORT_ROUTING_V1.text);
+  const checklist = parseChecklist(CONVEYOR_SORT_ROUTING_V1.text, structure.sections);
+  const derived = deriveChecklistState(checklist);
+
+  // Tasks and Pending render as two distinct sections, not one merged list.
+  assert.deepEqual(
+    structure.sections.map((s) => [s.heading, s.kind]),
+    [
+      ['Objective', 'objective'],
+      ['Problem', 'problem'],
+      ['Constraints', 'constraints'],
+      ['Tasks', 'tasks'],
+      ['Pending', null],
+    ],
+  );
+
+  const tasks = derived.sections.find((s) => s.heading === 'Tasks')!;
+  assert.deepEqual(
+    tasks.items.map((i) => [i.id, i.derivedState]),
+    [
+      ['Q1', 'done'],
+      ['Q2', 'open'],
+      ['Q3', 'done-unproven'],
+    ],
+  );
+
+  const pending = derived.sections.find((s) => s.heading === 'Pending')!;
+  // Pending mixes the Tasks section's own prefix (Q) with a second prefix
+  // (H), and its Q-numbering has a gap: Q11 never appears between Q10 and
+  // Q12.
+  assert.deepEqual(
+    pending.items.map((i) => i.id),
+    ['Q1', 'H1', 'Q10', 'Q12', 'H2'],
+  );
+  assert.deepEqual(
+    pending.items.map((i) => i.derivedState),
+    ['open', 'done', 'open', 'open', 'declined'],
+  );
+
+  // The two sections' own "Q1" items are distinct: Tasks's Q1 is the done,
+  // proven item; Pending's Q1 is a separate, still-open item. If IDs were
+  // not scoped per section, one of these two would be lost or merged into
+  // the other instead of both surviving with their own state.
+  assert.equal(tasks.items[0].id, 'Q1');
+  assert.equal(pending.items[0].id, 'Q1');
+  assert.notEqual(tasks.items[0].derivedState, pending.items[0].derivedState);
+  assert.notEqual(tasks.items[0].title, pending.items[0].title);
+
+  assert.equal(tasks.counts.total, 3);
+  assert.equal(pending.counts.total, 5);
 });

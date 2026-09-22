@@ -69,6 +69,7 @@ test('a revision whose document had fewer tasks closed recomputes a lower percen
 test('states the singular sentence for exactly one revision', () => {
   const history = buildHistory([revision({ date: '2026-09-21T09:00:00+00:00' })]);
   assert.equal(history.summary, '1 revision in git, on 2026-09-21.');
+  assert.equal(history.showChart, false);
 });
 
 test('states the plural sentence with the date range for several revisions', () => {

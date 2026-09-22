@@ -796,15 +796,17 @@ synthetic corpus in CI:
       Closing this needs someone with the real documents on disk to run that check, then
       open the built extension against them and look.
 
-- [ ] Corpus document C renders two section nodes with IDs scoped per section.
-      Provable but not proven. T4's corrected survey found document C's real shape is
-      `Tasks` (`T*`) plus `Pending`, where `Pending` mixes `P*` and `T*` together and
-      `T11` is missing entirely. No fixture reproduces that two-section shape:
-      `mobile-onboarding-revamp` collapses the mixed-prefix-with-gap quirk into one
-      section, and `cli-flow-audit`'s two sections (`Tasks`/`F*`, `Backlog`/`BK*`) each
-      carry a single, unmixed prefix. A fixture built to document C's exact shape,
-      asserted through `parseDocumentStructure`/`parseChecklist`, would close this
-      cheaply.
+- [x] Corpus document C renders two section nodes with IDs scoped per section.
+      `full-pipeline.test.ts`: "conveyor-sort-routing-v1: two sections, a mixed-prefix
+      gap, and an identifier scoped per section" — a new fixture,
+      `conveyor-sort-routing-v1` (`src/domain/fixtures/synthetic-documents.ts`),
+      reproduces document C's exact shape with invented content: `Tasks` carries a
+      single prefix (`Q*`), and `Pending` mixes `Q*` and `H*` together with a gap in
+      the `Q` numbering (`Q11` never appears between `Q10` and `Q12`). The test asserts
+      both render as separate section nodes through `parseDocumentStructure`, and that
+      the identifier `Q1`, present in both sections, is scoped per section rather than
+      collapsed into one namespace: `Tasks`'s `Q1` stays done, `Pending`'s `Q1` stays a
+      distinct, still-open item.
 
 - [x] Its `- [~]` item renders as `declined`, in the total and not as done.
       `feature-tree-provider.workspace-test.ts`: "a declined task ([~]) renders with the
@@ -835,13 +837,11 @@ synthetic corpus in CI:
       `build-recorded-fields.test.ts`: "Line budget is 'not recorded' when there is no
       delivery section at all" and "...when the delivery section states no figure".
 
-- [ ] Single-revision documents state their revision count instead of drawing a chart.
-      Provable but not proven. `build-history.test.ts`'s "states the singular sentence
-      for exactly one revision" checks only the sentence text, never `showChart`. The
-      chart threshold (`CHART_THRESHOLD_REVISIONS = 3`) is tested at 2 and 3 revisions,
-      never at 1. No existing test's failure would specifically catch a broken
-      single-revision chart suppression; one asserting `showChart === false` at exactly
-      one revision, alongside the singular sentence, would close it cheaply.
+- [x] Single-revision documents state their revision count instead of drawing a chart.
+      `build-history.test.ts`: "states the singular sentence for exactly one revision"
+      now also asserts `showChart === false` alongside the existing sentence assertion,
+      at exactly one revision — the case the chart threshold check (tested at 2 and 3
+      revisions) never covered.
 
 - [x] A task line whose first token is not `T<n>` still renders.
       `parse-checklist.test.ts`: "a task line whose first token is not an identifier
@@ -881,10 +881,10 @@ synthetic corpus in CI:
 These eleven criteria were inherited from `docs/PRD.md` on day one and were never
 consulted as a gate while the twenty-four tasks above were closed: the tasks document
 tracked its own evidence per task, and nobody tied that evidence back to this list until
-this audit. Audited now: six close with an existing test whose failure would mean the
-criterion false, cited above; two are provable cheaply against the synthetic corpus but
-have no test yet; three depend on the five real documents or on a human looking at the
-running extension and cannot be closed from this repository alone. `24/24` tasks closed
+this audit. Audited now: eight close with an existing test whose failure would mean the
+criterion false, cited above; three depend on the five real documents or on a human
+looking at the running extension and cannot be closed from this repository alone.
+`24/24` tasks closed
 never implied `11/11` criteria proven, and the gap between the two is what this audit
 closes honestly instead of by assumption.
 

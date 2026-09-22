@@ -423,6 +423,74 @@ export const WAREHOUSE_RELABEL_V1: SyntheticDocument = {
   ].join('\n'),
 };
 
+/**
+ * A fictional conveyor sortation feature.
+ *
+ * Covers:
+ * - Two sections, each carrying checklist items, where the first
+ *   (`## Tasks`) holds a single identifier prefix (`Q<n>`) and the second
+ *   (`## Pending`, an unrecognized heading) mixes two prefixes together
+ *   (`Q<n>` and `H<n>`) with a gap in the `Q` numbering (`Q11` never
+ *   appears between `Q10` and `Q12`) — the real corpus's document-C shape,
+ *   reproduced with invented content.
+ * - The same identifier (`Q1`) appearing in both sections, to prove IDs
+ *   are scoped to the section they were parsed from rather than collapsed
+ *   into one document-wide namespace: `Tasks`'s `Q1` is done, `Pending`'s
+ *   `Q1` is a distinct, still-open item, and both must survive intact.
+ */
+export const CONVEYOR_SORT_ROUTING_V1: SyntheticDocument = {
+  id: 'conveyor-sort-routing-v1',
+  featureName: 'conveyor-sort-routing-v1',
+  summary: 'Route every parcel through the correct sortation lane on the first pass.',
+  variants: [
+    'two-sections-first-single-prefix-second-mixed-prefix-with-gap',
+    'same-identifier-in-two-sections-scoped-without-collision',
+  ],
+  text: [
+    '# conveyor-sort-routing-v1',
+    '',
+    '## Objective',
+    '',
+    'Route every parcel through the correct sortation lane on the first pass,',
+    'instead of relying on a manual recheck at the end of the line.',
+    '',
+    '## Problem',
+    '',
+    'The sorter mis-routes roughly one parcel in twenty whenever two labels sit',
+    'within a few millimetres of each other on the belt, and nobody notices',
+    'until the recheck station catches it.',
+    '',
+    '## Constraints',
+    '',
+    '- Read the label at full belt speed; no slowing the line to rescan.',
+    '- Keep sorting against the old label format until every lane rebadges.',
+    '',
+    '## Tasks',
+    '',
+    '- [x] Q1 Re-calibrate the label scanner for close-spaced labels',
+    '      DONE `9c2a41e`.',
+    '',
+    '- [ ] Q2 Add a second scanner pass for low-confidence reads',
+    '',
+    '- [x] Q3 Log every mis-route for the weekly review',
+    '',
+    '## Pending',
+    '',
+    '- [ ] Q1 Confirm the recalibrated scanner holds under a full shift of',
+    '      throughput',
+    '',
+    '- [x] H1 Retire the manual recheck station',
+    '      DONE `f710bd3`.',
+    '',
+    '- [ ] Q10 Extend the second scanner pass to the outbound lanes',
+    '',
+    '- [ ] Q12 Migrate the weekly mis-route log to the new dashboard',
+    '',
+    '- [~] H2 Add a third scanner pass for the slowest lanes',
+    '      Declined: two passes already clear the mis-route budget.',
+  ].join('\n'),
+};
+
 /** Every synthetic document, for corpus-wide smoke checks. */
 export const SYNTHETIC_DOCUMENTS: readonly SyntheticDocument[] = [
   CACHE_WARM_V2,
@@ -430,4 +498,5 @@ export const SYNTHETIC_DOCUMENTS: readonly SyntheticDocument[] = [
   MOBILE_ONBOARDING_REVAMP,
   SIGNAGE_DISPLAY_DRIVER,
   WAREHOUSE_RELABEL_V1,
+  CONVEYOR_SORT_ROUTING_V1,
 ];
