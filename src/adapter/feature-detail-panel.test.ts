@@ -1,4 +1,5 @@
 import * as assert from 'node:assert/strict';
+import * as vscode from 'vscode';
 import { FeatureDetailPanel } from './feature-detail-panel';
 import type { FeatureModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
@@ -16,6 +17,36 @@ import type { FeatureHistory } from '../domain/build-history';
  */
 
 const EMPTY_COUNTS = { done: 0, total: 0, percentage: 0, doneUnproven: 0 };
+
+/** The standard CSS named colour keywords (CSS Color Module Level 4),
+ * used by the colour-audit test below to prove the panel never falls
+ * back to a hardcoded colour where a `--vscode-*` variable belongs.
+ * `transparent` and `currentColor` are deliberately excluded: neither
+ * names a literal colour, so ruling them out would not test anything. */
+const NAMED_CSS_COLOURS = [
+  'aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque', 'black',
+  'blanchedalmond', 'blue', 'blueviolet', 'brown', 'burlywood', 'cadetblue', 'chartreuse',
+  'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue', 'darkcyan',
+  'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki', 'darkmagenta',
+  'darkolivegreen', 'darkorange', 'darkorchid', 'darkred', 'darksalmon', 'darkseagreen',
+  'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise', 'darkviolet', 'deeppink',
+  'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite', 'forestgreen',
+  'fuchsia', 'gainsboro', 'ghostwhite', 'gold', 'goldenrod', 'gray', 'grey', 'green',
+  'greenyellow', 'honeydew', 'hotpink', 'indianred', 'indigo', 'ivory', 'khaki', 'lavender',
+  'lavenderblush', 'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan',
+  'lightgoldenrodyellow', 'lightgray', 'lightgreen', 'lightgrey', 'lightpink', 'lightsalmon',
+  'lightseagreen', 'lightskyblue', 'lightslategray', 'lightslategrey', 'lightsteelblue',
+  'lightyellow', 'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine',
+  'mediumblue', 'mediumorchid', 'mediumpurple', 'mediumseagreen', 'mediumslateblue',
+  'mediumspringgreen', 'mediumturquoise', 'mediumvioletred', 'midnightblue', 'mintcream',
+  'mistyrose', 'moccasin', 'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange',
+  'orangered', 'orchid', 'palegoldenrod', 'palegreen', 'paleturquoise', 'palevioletred',
+  'papayawhip', 'peachpuff', 'peru', 'pink', 'plum', 'powderblue', 'purple', 'rebeccapurple',
+  'red', 'rosybrown', 'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'seashell',
+  'sienna', 'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow', 'springgreen',
+  'steelblue', 'tan', 'teal', 'thistle', 'tomato', 'turquoise', 'violet', 'wheat', 'white',
+  'whitesmoke', 'yellow', 'yellowgreen',
+];
 
 function model(overrides: Partial<FeatureModel> = {}): FeatureModel {
   return {
@@ -43,13 +74,20 @@ function modelFromText(featureName: string, text: string): FeatureModel {
 
 suite('FeatureDetailPanel', () => {
   let panel: FeatureDetailPanel;
+  let extensionUri: vscode.Uri;
+
+  suiteSetup(() => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension, 'extension jorgealonsodev.odd-ledger was not found by the test host');
+    extensionUri = extension!.extensionUri;
+  });
 
   teardown(() => {
     panel?.dispose();
   });
 
   test('renders a title, a subtitle and three tiles', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(
       model({
         featureName: 'cache-warm-v2',
@@ -84,7 +122,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('opening a second feature reuses the same panel instead of creating a new one', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model({ featureName: 'cache-warm-v2' }), '/home/dev/checkout-service');
     const firstPanel = panel.webviewPanel;
     assert.ok(firstPanel);
@@ -97,7 +135,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('an empty title falls back to the same tab title on the reuse path as on the creation path', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model({ featureName: '' }), '/home/dev/checkout-service');
     const createdTitle = panel.webviewPanel?.title;
     assert.equal(createdTitle, 'ODD Ledger');
@@ -110,7 +148,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('a disposed panel is not reused: a later show() creates a fresh one', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model({ featureName: 'cache-warm-v2' }), '/home/dev/checkout-service');
     const firstPanel = panel.webviewPanel;
     assert.ok(firstPanel);
@@ -125,7 +163,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('escapes a feature name containing markup: no unescaped angle bracket reaches the HTML', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     const maliciousName = '<img src=x onerror=alert(1)>';
     panel.show(model({ featureName: maliciousName }), '/home/dev/checkout-service');
 
@@ -135,7 +173,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('renders the next step block, escaped, when the document records one', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(
       model({ nextStep: { line: 'Ship the <remaining> task next.', headingLine: 40 } }),
       '/home/dev/checkout-service',
@@ -148,7 +186,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('renders no next-step block at all when the document records none', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model({ nextStep: null }), '/home/dev/checkout-service');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -156,7 +194,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('declares a Content-Security-Policy and styles all three VS Code theme classes', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model(), '/home/dev/checkout-service');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -184,7 +222,7 @@ suite('FeatureDetailPanel', () => {
       '',
       '- [ ] T1 Do it',
     ].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('cache-warm-v2', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -199,7 +237,7 @@ suite('FeatureDetailPanel', () => {
 
   test('renders no objective region when the document has neither Objective nor Problem', () => {
     const text = ['# sample', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -216,7 +254,7 @@ suite('FeatureDetailPanel', () => {
       '      DONE `4b7c1e9`',
       '- [ ] T2 Not started yet',
     ].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -230,7 +268,7 @@ suite('FeatureDetailPanel', () => {
 
   test('a done-unproven task states the ODD unproven message inline, not a generic label', () => {
     const text = ['# sample', '', '## Tasks', '', '- [x] T6 Document the signing step'].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -249,7 +287,7 @@ suite('FeatureDetailPanel', () => {
       '',
       '- [ ] T1 Do it',
     ].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -259,7 +297,7 @@ suite('FeatureDetailPanel', () => {
 
   test('omits an other-section region for a kind the document does not carry', () => {
     const text = ['# sample', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -268,7 +306,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('the CSP style-src nonce matches the nonce on the <style> element, and is non-empty', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model(), '/home/dev/checkout-service');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -316,7 +354,7 @@ suite('FeatureDetailPanel', () => {
       '      Route: delegated writer.',
       '      Review: assess returned risk low, approved.',
     ].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -334,7 +372,7 @@ suite('FeatureDetailPanel', () => {
 
   test('a document recording none of the five fields still renders five rows, each reading "not recorded"', () => {
     const text = ['# sample', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -353,7 +391,7 @@ suite('FeatureDetailPanel', () => {
     const text = ['# sample', '', '## TDD mode', '', '<img src=x onerror=alert(1)>', '', '## Tasks', '', '- [ ] T1 Do it'].join(
       '\n',
     );
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(modelFromText('sample', text), '/workspace');
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -380,7 +418,7 @@ suite('FeatureDetailPanel', () => {
       points: pointsCount(2),
       showChart: false,
     };
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model(), '/home/dev/checkout-service', null, history);
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -399,7 +437,7 @@ suite('FeatureDetailPanel', () => {
       points: pointsCount(3),
       showChart: true,
     };
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model(), '/home/dev/checkout-service', null, history);
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -411,7 +449,7 @@ suite('FeatureDetailPanel', () => {
   });
 
   test('states unavailability, with no chart, when history has no usable revisions', () => {
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     // No history argument at all: exercises FeatureDetailPanel's own
     // default (UNAVAILABLE_HISTORY), not a hand-built stand-in for it.
     panel.show(model(), '/home/dev/checkout-service');
@@ -429,7 +467,7 @@ suite('FeatureDetailPanel', () => {
       points: pointsCount(2),
       showChart: false,
     };
-    panel = new FeatureDetailPanel();
+    panel = new FeatureDetailPanel(extensionUri);
     panel.show(model(), '/home/dev/checkout-service', '2026-09-21', history);
 
     const html = panel.webviewPanel?.webview.html ?? '';
@@ -438,5 +476,141 @@ suite('FeatureDetailPanel', () => {
     // the tile still read "not recorded" because lastWork was not wired
     // through.
     assert.match(html, /<div class="tile-label">LAST WORK<\/div>\s*<div class="tile-value">2026-09-21<\/div>/);
+  });
+
+  // --- Theming, codicons and chart geometry (T14) --------------------------
+
+  test('renders a codicon glyph for every derived task state, not a literal Unicode character', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [ ] T1 Open item',
+      '- [x] T2 Done item',
+      '      DONE `abc1234`',
+      '- [x] T3 No evidence item',
+      '- [~] T4 Declined item',
+      '- [?] T5 Odd marker item',
+    ].join('\n');
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    // One codicon span per state actually present, each with the same
+    // glyph name the tree view's ThemeIcon uses for that state (see
+    // STATE_ICON_ID in feature-tree-provider.ts).
+    assert.match(html, /<span class="task-glyph codicon codicon-circle-large-outline" aria-hidden="true"><\/span>/);
+    assert.match(html, /<span class="task-glyph codicon codicon-pass" aria-hidden="true"><\/span>/);
+    assert.match(html, /<span class="task-glyph codicon codicon-warning" aria-hidden="true"><\/span>/);
+    assert.match(html, /<span class="task-glyph codicon codicon-circle-slash" aria-hidden="true"><\/span>/);
+    assert.match(html, /<span class="task-glyph codicon codicon-question" aria-hidden="true"><\/span>/);
+    // The glyph spans are empty: the character comes from the codicon
+    // font's ::before rule, not from Unicode content inside the tag. A
+    // wrong implementation reverting to the old literal glyphs would
+    // still match the assertions above on class name alone, so this pins
+    // the actual old characters as gone too.
+    assert.ok(!html.includes('☐'));
+    assert.ok(!html.includes('☑'));
+    assert.ok(!html.includes('⚠'));
+    assert.ok(!html.includes('⊘'));
+  });
+
+  test('loads the codicon font from this webview\'s own local-resource origin and grants it in the policy', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model(), '/home/dev/checkout-service');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const fontFaceMatch = /@font-face\s*{\s*font-family:\s*'codicon';\s*src:\s*url\('([^']+)'\)/.exec(html);
+    assert.ok(fontFaceMatch, 'expected an @font-face rule loading the codicon font');
+    const fontUri = fontFaceMatch![1];
+    // Resolved through webview.asWebviewUri, so it is never the raw
+    // file:// path, and it points at the exact font file this panel ships.
+    assert.ok(!fontUri.startsWith('file:'));
+    assert.ok(fontUri.endsWith('codicon.ttf'), `expected the font URI to point at codicon.ttf, got ${fontUri}`);
+    assert.ok(fontUri.includes('codicons'), `expected the font URI to resolve inside @vscode/codicons, got ${fontUri}`);
+    // font-src is the one addition to the otherwise-empty policy; without
+    // it the @font-face load above would be refused by default-src 'none'.
+    assert.match(html, /Content-Security-Policy" content="[^"]*font-src [^;"]+;?[^"]*"/);
+  });
+
+  test('the rendered HTML contains no hardcoded colour: no hex, no rgb(), no named CSS colour', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Objective',
+      '',
+      'Ship the cache warmer.',
+      '',
+      '## Constraints',
+      '',
+      'No literal styling values anywhere.',
+      '',
+      '## Tasks',
+      '',
+      '- [ ] T1 Open item',
+      '- [x] T2 Done item',
+      '      DONE `abc1234`',
+      '- [x] T3 No evidence item',
+      '- [~] T4 Declined item',
+      '- [?] T5 Odd marker item',
+    ].join('\n');
+    const history: FeatureHistory = {
+      available: true,
+      summary: '3 revisions in git, 2026-09-10 to 2026-09-12.',
+      points: pointsCount(3),
+      showChart: true,
+    };
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace', '2026-09-12', history);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.doesNotMatch(html, /#[0-9a-fA-F]{3,8}\b/, 'expected no hex colour literal anywhere in the page');
+    assert.doesNotMatch(html, /\brgba?\(/i, 'expected no rgb()/rgba() colour literal anywhere in the page');
+    // Bounded on both sides by "not a word character and not a hyphen",
+    // not a plain \b: a bare \b treats "-" as a boundary too, so it would
+    // misfire on a hyphenated CSS keyword that merely starts with a
+    // colour's spelling, such as "white-space" (present in this page's
+    // own stylesheet, in .prose and .task-evidence) starting with "white".
+    const namedColourPattern = new RegExp(`(?<![\\w-])(${NAMED_CSS_COLOURS.join('|')})(?![\\w-])`, 'i');
+    assert.doesNotMatch(html, namedColourPattern, 'expected no named CSS colour keyword anywhere in the page');
+  });
+
+  test('the history chart\'s viewBox is padded so no point is clipped at its own extremes', () => {
+    // Percentages 0 and 100 are the y-axis extremes; two points also put
+    // one at each x-axis extreme (index 0 and the last index), so this
+    // fixture exercises all four edges the padding exists for.
+    const history: FeatureHistory = {
+      available: true,
+      summary: '2 revisions in git, 2026-09-20 to 2026-09-21.',
+      points: [
+        { hash: 'a'.repeat(12), date: '2026-09-20', percentage: 0 },
+        { hash: 'b'.repeat(12), date: '2026-09-21', percentage: 100 },
+      ],
+      showChart: true,
+    };
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model(), '/home/dev/checkout-service', null, history);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const viewBoxMatch = /viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/.exec(html);
+    assert.ok(viewBoxMatch, 'expected an SVG viewBox attribute');
+    const [, minXStr, minYStr, widthStr, heightStr] = viewBoxMatch!;
+    const minX = Number(minXStr);
+    const minY = Number(minYStr);
+    const maxX = minX + Number(widthStr);
+    const maxY = minY + Number(heightStr);
+
+    const circles = [...html.matchAll(/<circle class="history-point" cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/g)];
+    assert.equal(circles.length, 2);
+    for (const [, cxStr, cyStr, rStr] of circles) {
+      const cx = Number(cxStr);
+      const cy = Number(cyStr);
+      const r = Number(rStr);
+      assert.ok(cx - r >= minX, `circle at cx=${cx} r=${r} is clipped by the viewBox's left edge (minX=${minX})`);
+      assert.ok(cx + r <= maxX, `circle at cx=${cx} r=${r} is clipped by the viewBox's right edge (maxX=${maxX})`);
+      assert.ok(cy - r >= minY, `circle at cy=${cy} r=${r} is clipped by the viewBox's top edge (minY=${minY})`);
+      assert.ok(cy + r <= maxY, `circle at cy=${cy} r=${r} is clipped by the viewBox's bottom edge (maxY=${maxY})`);
+    }
   });
 });

@@ -102,12 +102,35 @@ function renderObjective(body: PanelBody): string {
     <pre class="prose">${escapeHtml(body.objective)}</pre>`;
 }
 
-const STATE_GLYPH: Record<DerivedItemState, string> = {
-  open: '☐',
-  done: '☑',
-  'done-unproven': '⚠',
-  declined: '⊘',
-  unknown: '?',
+/** Maps a derived task state to the codicon glyph name the tree view
+ * already uses for the same state (STATE_ICON_ID in
+ * feature-tree-provider.ts, via `vscode.ThemeIcon`), so the tree and this
+ * panel read as the same icon set rather than two different vocabularies
+ * for one meaning. The tree gets codicons for free from `ThemeIcon`; this
+ * webview has no such API and renders the font itself (see CODICON_GLYPH
+ * and the @font-face rule in renderHtml). */
+const STATE_CODICON: Record<DerivedItemState, string> = {
+  open: 'circle-large-outline',
+  done: 'pass',
+  'done-unproven': 'warning',
+  declined: 'circle-slash',
+  unknown: 'question',
+};
+
+/** The codepoint, inside the codicon font, for each of the five glyph
+ * names this panel actually renders (read from
+ * node_modules/@vscode/codicons/dist/codicon.css). The whole codicon
+ * stylesheet is not imported — it defines several hundred names this
+ * panel never uses, and importing it as a second stylesheet would need a
+ * second style-src origin alongside the nonce-scoped inline one. Adding a
+ * state to STATE_CODICON above needs a matching entry here, or that
+ * glyph's ::before rule renders no content. */
+const CODICON_GLYPH: Record<string, string> = {
+  'circle-large-outline': '\\ebb5',
+  pass: '\\eba4',
+  warning: '\\ea6c',
+  'circle-slash': '\\eabd',
+  question: '\\eb32',
 };
 
 function formatTaskLine(item: ItemModel): string {
@@ -132,10 +155,10 @@ function renderTaskEvidence(item: ItemModel): string {
 }
 
 function renderTaskItem(item: ItemModel): string {
-  const glyph = STATE_GLYPH[item.derivedState];
+  const codiconName = STATE_CODICON[item.derivedState];
   return `
       <div class="task-item task-item-${item.derivedState}">
-        <div class="task-title"><span class="task-glyph">${glyph}</span> ${escapeHtml(formatTaskLine(item))}</div>
+        <div class="task-title"><span class="task-glyph codicon codicon-${codiconName}" aria-hidden="true"></span> ${escapeHtml(formatTaskLine(item))}</div>
         ${renderTaskEvidence(item)}
       </div>`;
 }
@@ -203,6 +226,23 @@ function renderRecordedByDocument(fields: readonly RecordedField[]): string {
 const CHART_VIEWBOX_WIDTH = 100;
 const CHART_VIEWBOX_HEIGHT = 40;
 
+/** Radius, in viewBox units, of every plotted point's `<circle>`. */
+const CHART_POINT_RADIUS = 1.6;
+
+/** Padding, in viewBox units, added on every side of the plotted area
+ * before it becomes the SVG `viewBox`. A point at the very first or last
+ * index sits exactly on the plotted area's edge (x = 0 or
+ * CHART_VIEWBOX_WIDTH; y = 0 or CHART_VIEWBOX_HEIGHT for 100% or 0%), so
+ * its circle extends CHART_POINT_RADIUS past that edge in every
+ * direction. `preserveAspectRatio="none"` also means the x and y margins
+ * are never scaled by the same factor, so a shared, unscaled margin is
+ * what keeps both axes' extremes uniformly unclipped.
+ *
+ * Invariant: CHART_MARGIN must stay >= CHART_POINT_RADIUS. Keep the two
+ * in step — if the radius passed to the `<circle r>` below ever changes,
+ * this margin has to grow with it or the extremes clip again. */
+const CHART_MARGIN = CHART_POINT_RADIUS;
+
 /** One point's position inside the chart's viewBox: evenly spaced along
  * the x axis by revision order (T13's chosen axis is revision time, not
  * elapsed calendar time — see HISTORY_CHART_CAPTION), and the completion
@@ -231,12 +271,16 @@ function renderHistoryChart(points: readonly HistoryPoint[]): string {
     .map((point, index) => {
       const { x, y } = coordinates[index];
       const label = escapeHtml(`${point.date} · ${point.percentage}%`);
-      return `<circle class="history-point" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="1.6"><title>${label}</title></circle>`;
+      return `<circle class="history-point" cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${CHART_POINT_RADIUS}"><title>${label}</title></circle>`;
     })
     .join('');
   const ariaLabel = escapeHtml(`Completion percentage across ${points.length} git revisions`);
+  const viewBoxMinX = -CHART_MARGIN;
+  const viewBoxMinY = -CHART_MARGIN;
+  const viewBoxWidth = CHART_VIEWBOX_WIDTH + 2 * CHART_MARGIN;
+  const viewBoxHeight = CHART_VIEWBOX_HEIGHT + 2 * CHART_MARGIN;
   return `
-    <svg class="history-chart" viewBox="0 0 ${CHART_VIEWBOX_WIDTH} ${CHART_VIEWBOX_HEIGHT}" preserveAspectRatio="none" role="img" aria-label="${ariaLabel}">
+    <svg class="history-chart" viewBox="${viewBoxMinX} ${viewBoxMinY} ${viewBoxWidth} ${viewBoxHeight}" preserveAspectRatio="none" role="img" aria-label="${ariaLabel}">
       <polyline class="history-line" points="${polylinePoints}" />
       ${circles}
     </svg>`;
@@ -268,15 +312,30 @@ function renderHistory(history: FeatureHistory): string {
  * `enableScripts` is left off in `show()` below: this is a static,
  * read-only render with nothing to script, so the CSP has no `script-src`
  * exception at all and `default-src 'none'` blocks scripts outright.
+ *
+ * `font-src` is the one addition to that otherwise maximally strict
+ * policy. `default-src 'none'` denies every resource type with no
+ * exception, and `style-src`'s nonce only vouches for the inline
+ * stylesheet element itself, not for a remote resource one of its rules
+ * loads — the @font-face rule inside that stylesheet still needs its own
+ * grant to fetch the codicon font file. The value is `webview.cspSource`,
+ * this webview's own local-resource origin (never a wildcard and never a
+ * remote host), matching `asWebviewUri` below and the `localResourceRoots`
+ * scoped to exactly the codicon directory in `show()`.
  */
 function renderHtml(
   header: PanelHeader,
   body: PanelBody,
   recordedFields: readonly RecordedField[],
   history: FeatureHistory,
+  webview: vscode.Webview,
+  extensionUri: vscode.Uri,
 ): string {
   const nonce = createNonce();
-  const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
+  const codiconFontUri = webview.asWebviewUri(
+    vscode.Uri.joinPath(extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.ttf'),
+  );
+  const csp = `default-src 'none'; style-src 'nonce-${nonce}'; font-src ${webview.cspSource};`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -286,6 +345,25 @@ function renderHtml(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(header.title)}</title>
 <style nonce="${nonce}">
+  @font-face {
+    font-family: 'codicon';
+    src: url('${codiconFontUri}') format('truetype');
+  }
+  .codicon {
+    font-family: 'codicon';
+    font-size: 16px;
+    line-height: 1;
+    display: inline-block;
+    text-align: center;
+    text-rendering: auto;
+    -webkit-font-smoothing: antialiased;
+    vertical-align: middle;
+  }
+  .codicon-circle-large-outline::before { content: '${CODICON_GLYPH['circle-large-outline']}'; }
+  .codicon-pass::before { content: '${CODICON_GLYPH.pass}'; }
+  .codicon-warning::before { content: '${CODICON_GLYPH.warning}'; }
+  .codicon-circle-slash::before { content: '${CODICON_GLYPH['circle-slash']}'; }
+  .codicon-question::before { content: '${CODICON_GLYPH.question}'; }
   body {
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size);
@@ -424,8 +502,22 @@ function renderHtml(
     font-size: 0.8em;
     color: var(--vscode-descriptionForeground);
   }
+  /* The chart otherwise has no boundary at all: it is a bare polyline and
+     circles floating on the page background, distinguished from the rest
+     of the panel by nothing but where the strokes happen to be. High
+     contrast themes are built around visible borders standing in for the
+     background fills other themes use to separate regions, so the chart
+     gets an explicit one here and its own stroke bumps join the tile and
+     task-item ones above. */
   body.vscode-high-contrast .history-line {
     stroke-width: 2;
+  }
+  body.vscode-high-contrast .history-chart {
+    border: 1px solid var(--vscode-panel-border);
+  }
+  body.vscode-high-contrast .history-point {
+    stroke: var(--vscode-editor-background);
+    stroke-width: 0.6;
   }
 </style>
 </head>
@@ -453,6 +545,12 @@ function renderHtml(
  */
 export class FeatureDetailPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
+
+  /** `extensionUri` locates the extension's own install directory, needed
+   * to resolve the codicon font file (see show() and renderHtml) through
+   * `webview.asWebviewUri` — a webview cannot load a `file://` path
+   * directly, only one rewritten through its own local-resource scheme. */
+  constructor(private readonly extensionUri: vscode.Uri) {}
 
   /** The currently open panel, or `undefined` when none is open. Exposed
    * read-only for callers (and tests) that need to inspect the live
@@ -484,7 +582,7 @@ export class FeatureDetailPanel implements vscode.Disposable {
 
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
-      this.panel.webview.html = renderHtml(header, body, recordedFields, history);
+      this.panel.webview.html = renderHtml(header, body, recordedFields, history, this.panel.webview, this.extensionUri);
       this.panel.reveal();
       return;
     }
@@ -493,12 +591,16 @@ export class FeatureDetailPanel implements vscode.Disposable {
       VIEW_TYPE,
       header.title || VIEW_TITLE_FALLBACK,
       vscode.ViewColumn.One,
-      // No scripts: a static header/tiles/body render has nothing to
-      // script, so enableScripts stays off entirely rather than
-      // defaulting it on.
-      {},
+      {
+        // No scripts: a static header/tiles/body render has nothing to
+        // script, so enableScripts stays off entirely rather than
+        // defaulting it on. The one local resource this panel loads is
+        // the codicon font, so localResourceRoots is scoped to exactly
+        // that directory rather than the whole extension install.
+        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'node_modules', '@vscode/codicons', 'dist')],
+      },
     );
-    this.panel.webview.html = renderHtml(header, body, recordedFields, history);
+    this.panel.webview.html = renderHtml(header, body, recordedFields, history, this.panel.webview, this.extensionUri);
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });

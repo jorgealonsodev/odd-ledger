@@ -8,7 +8,7 @@ import { runOpenFeatureFetch } from './domain/run-open-feature-fetch';
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new FeatureTreeDataProvider();
-  const detailPanel = new FeatureDetailPanel();
+  const detailPanel = new FeatureDetailPanel(context.extensionUri);
   // FeatureDetailPanel implements vscode.Disposable, so pushing it here
   // is what disposes its open webview panel (if any) on deactivate.
   context.subscriptions.push(detailPanel);
