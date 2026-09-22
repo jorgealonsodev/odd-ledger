@@ -583,12 +583,45 @@ user's decisions under ordinary repository policy.
       itself carries no receipt, and this document does not claim one. Delivery follows
       ordinary repository policy.
 
-- [ ] T14 Theming and layout
+- [x] T14 Theming and layout
       Theme tokens throughout and codicons. The webview styles against the CSS variables VS
       Code injects and against `body.vscode-light`, `body.vscode-dark` and
       `body.vscode-high-contrast` — all three categories, not two. Narrow sidebar width, tile
       row wrapping.
-      Route: delegated writer.
+      Route: delegated writer. DONE `c875697`.
+      The panel's task states now use the same codicons the tree already shows, so both
+      surfaces name a state the same way and the glyphs take their colour from the theme
+      rather than carrying one. Only the five rules this panel needs are written out and
+      only the font file is fetched, which is why the content policy gained exactly one
+      exception: the nonce vouches for the stylesheet element, not for a resource a rule
+      inside it loads. Scripts stay denied.
+      **High contrast got what it actually needs, which is a boundary.** The other two
+      categories separate surfaces with a background fill; high contrast does not, so the
+      chart, which had no border at all and sat on the bare page, now carries one and its
+      points carry a stroke.
+      The chart also stopped clipping itself. Its box had no margin, so a point at either
+      extreme was drawn half outside it, and with the aspect ratio left free the clipping
+      was worse on one axis than the other. The margin is now the point radius, read from
+      the same constant, with the invariant recorded beside it so the two cannot drift.
+      That geometry defect had been raised as an advisory finding in the T13 review and
+      was never a task; it closed here because it is drawing, which is this task's subject.
+      **A test now fails if any literal colour reaches the rendered page**, searching the
+      whole document for hexadecimal values, `rgb(` and named colours. That check is cheap
+      and does not rot, unlike a manual audit that expires at the next change. Writing it
+      was instructive: the first version matched `white` inside `white-space` and had to
+      learn word boundaries, which is a genuine failure observed rather than a story about
+      one.
+      Layout needed nothing: the wrapping tile row, the wrapping table values and all
+      three theme selectors were already in place from T10 through T13.
+      Evidence: `npm run check-types` clean; `npm run test:domain` unchanged at 207 tests,
+      206 pass, 1 skipped, this being adapter-only work; `npm run test:extension` 66
+      passing in the no-folder profile and 17 in the workspace profile; `npm run bundle`
+      exit 0 with the font shipped as a runtime dependency rather than bundled; `grep` over
+      `src/domain/` for a `vscode` import returns clean. Four behaviours were falsified one
+      at a time and reverted byte-identical, confirmed by checksum.
+      Review: RDD assess over `63e784f..c875697` returned risk **medium** (368 lines,
+      configuration change from the new dependency). Under the review cadence chosen on
+      2026-09-22 this accumulates into the current slice rather than being reviewed alone.
 
 - [ ] T15 Refresh on change
       Watch `odd/tasks/*.md` and refresh the tree and any open panel; manual refresh action.
@@ -705,7 +738,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 13 of 24 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 14 of 24 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -745,6 +778,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 13 of 24 tasks c
 | `f73dc9b` | T13 second correction: the panel shows first, newest click wins |
 | `e8a40c9` | T13 third correction: a closed panel stays closed |
 | `fd805cf` | T13 simplified: the deferred second render deleted |
+| `63e784f` | T13 recorded as closed with its three review rounds |
+| `c875697` | T14 codicons, high-contrast boundaries and an unclipped chart |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
 
@@ -842,6 +877,12 @@ files for most of each task. Raised the idle timeout and added a resync after ea
 subagent. CodeGraph was then upgraded to 1.6.0 at the user's instruction, which required a
 full re-index; the timeout default is unchanged in that version, so both fixes stand.
 
+**A packaging risk T16 must not walk into.** T14 added the codicon font as a runtime
+dependency, which is what makes it ship, and this repository has no ignore file yet. If
+T16 writes one that excludes the module directory wholesale, the font disappears and the
+panel loses its icons silently, with nothing failing. Whatever T16 writes must keep that
+font reachable and prove it from the built package rather than from the working tree.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -853,8 +894,7 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T14: theming and layout, then T15 and T16. The cleanup pass (T17 to T24) follows
-the feature work.
+Next is T15, then T16. The cleanup pass (T17 to T24) follows the feature work.
 
 T15 is worth pulling forward if the tree is being used while this is built. The extension
 has no file watcher yet, so an open view keeps showing whatever it read last; the user hit
