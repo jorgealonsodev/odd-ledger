@@ -101,8 +101,11 @@
     "check-types": "tsc --noEmit -p ./",
     "bundle": "node esbuild.js",
     "watch": "node esbuild.js --watch",
+    "clean": "rm -rf dist out",
     "test:domain": "npm run compile && cd out/domain && node --test --test-reporter=spec",
     "test:extension": "npm run compile && npm run bundle && vscode-test",
+    "test:package": "npm run clean && npm run bundle -- --production && node --test scripts/verify-package.test.js",
+    "package": "npm run clean && vsce package",
     "vscode:prepublish": "npm run check-types && npm run bundle -- --production"
   },
   "devDependencies": {
@@ -111,6 +114,7 @@
     "@types/vscode": "^1.85.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   },

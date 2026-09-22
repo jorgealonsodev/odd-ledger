@@ -1,0 +1,46 @@
+# What ships is everything NOT listed here: package.json, README.md,
+# dist/extension.js (the bundled entry point), resources/, and the one
+# codicon font file carved out of node_modules below.
+#
+# node_modules/@vscode/codicons ships its font as a *runtime* dependency —
+# src/adapter/feature-detail-panel.ts resolves
+# node_modules/@vscode/codicons/dist/codicon.ttf through the extension's own
+# install directory at activation time. Excluding node_modules wholesale
+# would drop that file silently: the panel would still open, just without
+# icons. scripts/verify-package.test.js asserts this file survives packaging
+# so that mistake fails a test instead of shipping unnoticed.
+
+# Sources; only the bundled output in dist/ is needed at runtime.
+src/**
+
+# Product specification, the ODD ledger for this project's own development,
+# and CodeGraph's local index. None of these are part of the extension.
+docs/**
+PRD.md
+odd/**
+.codegraph/**
+.atl/**
+
+# Compiled test output. Domain tests run from here under node --test, but
+# the runtime code is the bundle in dist/, not this directory.
+out/**
+
+# Development-only configuration and tooling.
+.vscode/**
+.vscode-test.mjs
+.github/**
+tsconfig.json
+esbuild.js
+.gitignore
+scripts/**
+
+# Everything under node_modules except the codicon font loaded at runtime.
+node_modules/**
+!node_modules/@vscode/codicons/dist/codicon.ttf
+
+# Package manager files not needed at runtime.
+package-lock.json
+
+# Never shipped.
+*.vsix
+.vscode-test/
