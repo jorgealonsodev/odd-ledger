@@ -1,10 +1,9 @@
-import { dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { FeatureDetailPanel } from './adapter/feature-detail-panel';
 import { FeatureDocumentWatcher } from './adapter/feature-document-watcher';
 import type { FeatureNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
-import { refreshOpenPanelIfTouched } from './adapter/refresh-open-panel';
+import { refreshOpenPanelIfTouched, resolveWorkspaceRoot } from './adapter/refresh-open-panel';
 import { fetchDocumentRevisions } from './domain/fetch-git-revisions';
 import { runOpenFeatureFetch } from './domain/run-open-feature-fetch';
 
@@ -34,13 +33,14 @@ export function activate(context: vscode.ExtensionContext): void {
       // than by clicking a tree item: there is no feature to show.
       return;
     }
-    const documentUri = vscode.Uri.file(node.model.documentPath);
     // The workspace folder the document actually lives under, so a
     // multi-root workspace reports the right project name and a
     // repo-relative path (T10). Falling back to the document's own
     // directory keeps this from throwing if the folder cannot be
     // resolved; the relative path then degrades to just the filename.
-    const workspaceRoot = vscode.workspace.getWorkspaceFolder(documentUri)?.uri.fsPath ?? dirname(node.model.documentPath);
+    // Shared with the watcher-triggered refresh path (refresh-open-panel.ts)
+    // so both resolve a document's workspace root identically.
+    const workspaceRoot = resolveWorkspaceRoot(node.model.documentPath);
     await runOpenFeatureFetch(node.model, workspaceRoot, detailPanel, fetchDocumentRevisions);
   });
   context.subscriptions.push(openFeatureCommand);

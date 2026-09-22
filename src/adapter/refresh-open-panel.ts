@@ -28,12 +28,13 @@ export interface RefreshablePanel extends OpenFeaturePanel {
 
 /**
  * Resolves the workspace folder a document lives under, falling back to
- * the document's own directory when no folder resolves — the same
- * fallback oddLedger.openFeature already uses (extension.ts), so a
- * watcher-triggered refresh degrades exactly the same way a manual open
- * does when a document sits outside any open workspace folder.
+ * the document's own directory when no folder resolves. Exported so
+ * oddLedger.openFeature (extension.ts) can call the same function instead
+ * of carrying a second copy of this resolution rule — a watcher-triggered
+ * refresh and a manual open now degrade identically, by construction,
+ * when a document sits outside any open workspace folder.
  */
-function resolveWorkspaceRoot(documentPath: string): string {
+export function resolveWorkspaceRoot(documentPath: string): string {
   const documentUri = vscode.Uri.file(documentPath);
   return vscode.workspace.getWorkspaceFolder(documentUri)?.uri.fsPath ?? dirname(documentPath);
 }

@@ -562,7 +562,7 @@ suite('FeatureDetailPanel', () => {
 
   // --- Theming, codicons and chart geometry (T14) --------------------------
 
-  test('renders a codicon glyph for every derived task state, not a literal Unicode character', () => {
+  test('renders a codicon glyph and its state modifier class for every derived task state, each paired with its own item', () => {
     const text = [
       '# sample',
       '',
@@ -596,6 +596,34 @@ suite('FeatureDetailPanel', () => {
     assert.ok(!html.includes('☑'));
     assert.ok(!html.includes('⚠'));
     assert.ok(!html.includes('⊘'));
+    // The five checks above only prove every glyph name and every item
+    // appear somewhere in the page: a mapping that paired the wrong glyph
+    // with the wrong state (or dropped the "task-item-<state>" modifier
+    // class this panel also needs for its per-state styling) would still
+    // pass them, because assert.match does not care where in the document
+    // its pattern is found. Each block below ties one item's own wrapper
+    // class, its own glyph class, and its own rendered text together, so a
+    // swapped mapping or a missing modifier class fails its exact item.
+    assert.match(
+      html,
+      /<div class="task-item task-item-open">\s*<div class="task-title"><span class="task-glyph codicon codicon-circle-large-outline" aria-hidden="true"><\/span> T1 {2}Open item<\/div>/,
+    );
+    assert.match(
+      html,
+      /<div class="task-item task-item-done">\s*<div class="task-title"><span class="task-glyph codicon codicon-pass" aria-hidden="true"><\/span> T2 {2}Done item<\/div>/,
+    );
+    assert.match(
+      html,
+      /<div class="task-item task-item-done-unproven">\s*<div class="task-title"><span class="task-glyph codicon codicon-warning" aria-hidden="true"><\/span> T3 {2}No evidence item<\/div>/,
+    );
+    assert.match(
+      html,
+      /<div class="task-item task-item-declined">\s*<div class="task-title"><span class="task-glyph codicon codicon-circle-slash" aria-hidden="true"><\/span> T4 {2}Declined item<\/div>/,
+    );
+    assert.match(
+      html,
+      /<div class="task-item task-item-unknown">\s*<div class="task-title"><span class="task-glyph codicon codicon-question" aria-hidden="true"><\/span> T5 {2}Odd marker item<\/div>/,
+    );
   });
 
   test('loads the codicon font from this webview\'s own local-resource origin and grants it in the policy', () => {

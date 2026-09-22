@@ -182,15 +182,28 @@ test('orders results the same way whatever locale the host process is configured
     // two the process happens to be configured for, so asserting the
     // English order here fails on a Swedish host unless the locale is
     // pinned in the implementation.
+    //
+    // The 'ä' below is written in its NFD (decomposed) form — 'a' plus a
+    // combining diaeresis — rather than the single precomposed character a
+    // text editor normally produces. That is exactly the byte sequence a
+    // filesystem that normalizes filenames to their decomposed form (APFS,
+    // HFS+) hands back from a directory read even when the caller wrote the
+    // precomposed form, so pinning it here reproduces that class of
+    // filesystem deterministically instead of only on a machine that
+    // happens to have one. A comparison against the precomposed literal
+    // would then fail for a byte-representation reason that has nothing to
+    // do with collation, which is what this test exists to check — both
+    // sides are normalized before comparing so it keeps testing collation.
+    const decomposedArende = `${'ärende-queue'.normalize('NFD')}.md`;
     writeFileSync(join(tasksDir, 'zebra-cache.md'), '# zebra-cache\n');
     writeFileSync(join(tasksDir, 'anchor-store.md'), '# anchor-store\n');
-    writeFileSync(join(tasksDir, 'ärende-queue.md'), '# arende-queue\n');
+    writeFileSync(join(tasksDir, decomposedArende), '# arende-queue\n');
 
     const result = discoverFeatureDocuments(root);
 
     assert.deepEqual(
-      result.map((doc) => doc.featureName),
-      ['anchor-store', 'ärende-queue', 'zebra-cache'],
+      result.map((doc) => doc.featureName.normalize('NFC')),
+      ['anchor-store', 'ärende-queue', 'zebra-cache'].map((name) => name.normalize('NFC')),
     );
   } finally {
     cleanup(root);

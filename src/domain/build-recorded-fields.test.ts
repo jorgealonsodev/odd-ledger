@@ -332,6 +332,34 @@ test('Line budget keeps the stated figure and the full sentence when the deliver
   assert.equal(lineBudget.value, 'roughly 1,234 authored changed lines including tests.');
 });
 
+// --- Truncation prefers more content over a sentence end that lands early ---
+
+test('TDD keeps content past an early sentence end rather than stopping at it, and still names the source', () => {
+  // Mirrors a real shape this table has to read: a short bold clause that
+  // happens to end in a period a few characters in, followed by a much
+  // longer "Source: ..." clause the row exists to show. A sentence-boundary
+  // rule with no lower bound on how much of the budget it must fill would
+  // cut immediately after "enabled." and throw away the source entirely.
+  const text = [
+    '# sample',
+    '',
+    '## TDD mode',
+    '',
+    '**Invented Setting: enabled.** Source: some external configuration system, referenced from a fairly long path that this test needs for the total line to exceed the character budget.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+
+  const fields = buildRecordedFields(modelFromText(text));
+  const tdd = fields.find((f) => f.label === 'TDD')!;
+
+  assert.notEqual(tdd.value, 'enabled.', 'expected more than just the first sentence');
+  assert.match(tdd.value, /Source:/);
+  assert.ok(tdd.value.length > 'enabled.'.length + 20);
+});
+
 // --- Truncation never cuts a word in half ------------------------------------
 
 test('a truncated table value never ends mid-word', () => {

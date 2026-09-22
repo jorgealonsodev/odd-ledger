@@ -61,6 +61,14 @@ suite('Extension activation', () => {
     const before = webviewTabs().length;
     await vscode.commands.executeCommand('oddLedger.openFeature');
 
+    // A tab count checked synchronously right after executeCommand cannot
+    // fail this assertion even when the guard is broken: tabGroups only
+    // reflects a newly created webview panel after the same short settle
+    // delay waitForWebviewTab exists to poll through (see its own comment
+    // above), so a wrongly-opened panel would not show up here yet either.
+    // Waiting out that window first is what lets this test actually
+    // observe whether a panel opened.
+    await new Promise((resolve) => setTimeout(resolve, 500));
     assert.equal(webviewTabs().length, before);
   });
 

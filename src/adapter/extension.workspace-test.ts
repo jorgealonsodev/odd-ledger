@@ -1,5 +1,7 @@
+import { basename, join } from 'node:path';
 import * as assert from 'node:assert/strict';
 import * as vscode from 'vscode';
+import { resolveWorkspaceRoot } from './refresh-open-panel';
 import { FeatureTreeDataProvider } from './feature-tree-provider';
 import type { FeatureNode } from './feature-tree-provider';
 
@@ -31,7 +33,14 @@ async function waitForWebviewTab(label: string, timeoutMs = 2000): Promise<vscod
 }
 
 suite('oddLedger.openFeature — workspace with odd/tasks/', () => {
-  test('opens the detail panel, resolving the workspace root via vscode.workspace.getWorkspaceFolder', async () => {
+  test('opens a tab titled after the feature name when invoked from a workspace-discovered node', async () => {
+    // This is a wiring smoke test: it proves the command still opens a
+    // panel end to end when a real workspace folder is open. It does not,
+    // and cannot from a vscode.Tab alone, observe which workspace root the
+    // panel resolved — the tab exposes no more than its label, and the
+    // label comes from the feature name regardless of that resolution. See
+    // "resolveWorkspaceRoot finds the real workspace folder..." below for
+    // the test that actually exercises the resolution this command uses.
     const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
     assert.ok(extension);
     await extension!.activate();
@@ -46,5 +55,28 @@ suite('oddLedger.openFeature — workspace with odd/tasks/', () => {
     assert.ok(opened, 'expected a tab titled after the feature name to open');
 
     await vscode.window.tabGroups.close(opened!);
+  });
+
+  test('resolveWorkspaceRoot finds the real workspace folder for a document inside it, not the dirname fallback', () => {
+    // The previous test's tab-count check cannot tell a correct
+    // vscode.workspace.getWorkspaceFolder resolution apart from the
+    // dirname(documentPath) fallback: both produce a tab titled after the
+    // feature name, since the tab title never carries the resolved root.
+    // This calls the same function oddLedger.openFeature and the
+    // watcher-triggered refresh both use (see extension.ts and
+    // refresh-open-panel.ts) directly, against a real open workspace
+    // folder, and checks the one thing that actually distinguishes the two
+    // paths: the fallback's basename would be "tasks" (the document's own
+    // parent directory), while a correct resolution's basename is the
+    // workspace folder's own name.
+    const folders = vscode.workspace.workspaceFolders;
+    assert.ok(folders && folders.length === 1, 'expected the fixture workspace folder to be open');
+    const workspaceFolderPath = folders![0].uri.fsPath;
+    const documentPath = join(workspaceFolderPath, 'odd', 'tasks', 'alpha-widget-cache.md');
+
+    const resolved = resolveWorkspaceRoot(documentPath);
+
+    assert.equal(resolved, workspaceFolderPath);
+    assert.notEqual(basename(resolved), 'tasks', 'resolution fell back to the document\'s own directory instead of finding the workspace folder');
   });
 });

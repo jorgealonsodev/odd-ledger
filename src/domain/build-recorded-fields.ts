@@ -55,7 +55,10 @@ function stripLeadingLabel(text: string): string {
 const SENTENCE_END_RE = /[.!?](?=\s|$)/g;
 
 /** The index of the last sentence-ending mark at or before `budget`
- * characters into `text`, or -1 when none is found there. */
+ * characters into `text`, or -1 when none is found there. Scans every
+ * match in ascending order and keeps the latest one still within budget,
+ * so a text carrying several sentence ends before the cutoff reports the
+ * last of them, not the first. */
 function lastSentenceEndWithin(text: string, budget: number): number {
   SENTENCE_END_RE.lastIndex = 0;
   let last = -1;
@@ -70,18 +73,31 @@ function lastSentenceEndWithin(text: string, budget: number): number {
 }
 
 /**
+ * A sentence boundary is only worth preferring over the word-boundary
+ * fallback when it actually uses a reasonable share of the budget. A cell
+ * like `**Strict TDD: enabled.** Source: ...` carries its first sentence
+ * end eight characters in, and cutting there on principle throws away the
+ * "Source: ..." clause the row exists to show, even though seventy more
+ * characters were available. Below this fraction of the budget, more
+ * content wins over a "complete thought" that said almost nothing.
+ */
+const MIN_SENTENCE_FILL_RATIO = 0.5;
+
+/**
  * Truncates `text` to at most `budget` characters. Prefers to end on a real
- * sentence boundary, so the value still reads as a complete thought rather
- * than an arbitrary fragment; falls back to the last word boundary with an
- * ellipsis when no sentence ends within the budget. Never cuts a word in
- * half.
+ * sentence boundary when that boundary fills at least
+ * MIN_SENTENCE_FILL_RATIO of the budget, so the value still reads as a
+ * complete thought rather than an arbitrary fragment; otherwise falls back
+ * to the last word boundary with an ellipsis, so a sentence end that lands
+ * very early in the text does not throw away most of the available budget.
+ * Never cuts a word in half.
  */
 function truncateAtBoundary(text: string, budget: number): string {
   if (text.length <= budget) {
     return text;
   }
   const sentenceEnd = lastSentenceEndWithin(text, budget);
-  if (sentenceEnd !== -1) {
+  if (sentenceEnd !== -1 && sentenceEnd + 1 >= budget * MIN_SENTENCE_FILL_RATIO) {
     return text.slice(0, sentenceEnd + 1);
   }
   const wordBoundary = text.slice(0, budget).lastIndexOf(' ');

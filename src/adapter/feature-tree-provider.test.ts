@@ -237,14 +237,24 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
   // --- closed-feature muting (T9) -----------------------------------------
 
   test('an open feature node uses the plain checklist icon with no theme colour override', () => {
-    const node = new FeatureNode(feature({ progress: { done: 1, total: 2, percentage: 50, doneUnproven: 0 } }));
+    const node = new FeatureNode(
+      feature({
+        progress: { done: 1, total: 2, percentage: 50, doneUnproven: 0 },
+        sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'open' })] })],
+      }),
+    );
     assert.ok(node.iconPath instanceof vscode.ThemeIcon);
     assert.equal((node.iconPath as vscode.ThemeIcon).id, 'checklist');
     assert.equal((node.iconPath as vscode.ThemeIcon).color, undefined);
   });
 
   test('a fully-closed feature node renders muted via the disabledForeground theme colour', () => {
-    const node = new FeatureNode(feature({ progress: { done: 2, total: 2, percentage: 100, doneUnproven: 0 } }));
+    const node = new FeatureNode(
+      feature({
+        progress: { done: 2, total: 2, percentage: 100, doneUnproven: 0 },
+        sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' })] })],
+      }),
+    );
     assert.ok(node.iconPath instanceof vscode.ThemeIcon);
     assert.equal((node.iconPath as vscode.ThemeIcon).id, 'checklist');
     const color = (node.iconPath as vscode.ThemeIcon).color;

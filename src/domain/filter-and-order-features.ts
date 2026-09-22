@@ -17,15 +17,40 @@ import type { DerivedItemState } from './derive-checklist-state';
 export type LedgerFilter = 'all' | 'open' | 'unproven';
 
 /**
- * A feature is closed when every countable item across its sections is
- * done, and it has at least one countable item. A feature with zero items
- * is not closed: `deriveChecklistState` already refuses to call zero items
- * 100% (it reports 0%, not NaN and not 100%), and this function keeps that
- * same honesty — there is no measured progress to have finished.
+ * A feature is closed when it has at least one countable item and none of
+ * them — across every rendered section, not only the ones that count
+ * toward `progress` — is still open, declined, or unknown.
+ *
+ * `model.progress` was the original source for this decision, and it is
+ * deliberately narrower: T5 chose to compute the progress ratio over only
+ * the sections a document treats as its task list (`tasks`, or an
+ * unrecognized heading), because folding every section into that ratio
+ * made a document's own "Pending" section look complete while it still had
+ * open work. That choice is about what percentage to report and is not
+ * revisited here.
+ *
+ * Closedness answers a different question than the ratio does — "is there
+ * anything left to do anywhere in this document" — and the `Open` filter
+ * (see `admits` below) already answers exactly that question, per item,
+ * over every section it renders. Reading only `model.progress` here made
+ * the two disagree: a feature whose progress-bearing sections were all
+ * done rendered muted and sorted last while `Open` still had an
+ * acceptance-criteria item left to show, telling the user two different
+ * things in the same tree. Reusing the `Open` filter's own admission rule
+ * is what keeps them from drifting apart again — a feature the tree calls
+ * finished is now exactly a feature `Open` has nothing left to show.
  */
 export function isFeatureClosed(model: FeatureModel): boolean {
-  const { done, total } = model.progress;
-  return total > 0 && done === total;
+  let total = 0;
+  for (const section of model.sections) {
+    for (const item of section.items) {
+      total += 1;
+      if (admits('open', item.derivedState)) {
+        return false;
+      }
+    }
+  }
+  return total > 0;
 }
 
 /**

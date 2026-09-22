@@ -49,53 +49,91 @@ function feature(overrides: Partial<FeatureModel> = {}): FeatureModel {
 // --- isFeatureClosed -------------------------------------------------------
 
 test('isFeatureClosed is true when every countable item is done', () => {
-  const model = feature({ progress: counts({ done: 3, total: 3, percentage: 100 }) });
+  const model = feature({
+    sections: [
+      section({
+        items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' }), item({ id: 'T3', derivedState: 'done' })],
+      }),
+    ],
+  });
   assert.equal(isFeatureClosed(model), true);
 });
 
 test('isFeatureClosed is false when some items are still open', () => {
-  const model = feature({ progress: counts({ done: 2, total: 3, percentage: 67 }) });
+  const model = feature({
+    sections: [
+      section({
+        items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' }), item({ id: 'T3', derivedState: 'open' })],
+      }),
+    ],
+  });
   assert.equal(isFeatureClosed(model), false);
 });
 
 test('isFeatureClosed is false for a feature with zero countable items: there is no measured progress to close', () => {
-  const model = feature({ progress: counts({ done: 0, total: 0, percentage: 0 }) });
+  const model = feature({ sections: [] });
   assert.equal(isFeatureClosed(model), false);
 });
 
 test('isFeatureClosed counts a done-unproven item as done, same as deriveChecklistState does', () => {
   // done-unproven is additive on top of "done" (see derive-checklist-state.ts):
-  // the item still counts in `progress.done`, so a feature made entirely of
-  // done-unproven items is still closed.
-  const model = feature({ progress: counts({ done: 2, total: 2, percentage: 100, doneUnproven: 2 }) });
+  // the Open filter does not admit it (see `admits` below), so a feature
+  // made entirely of done-unproven items is still closed.
+  const model = feature({
+    sections: [section({ items: [item({ id: 'T1', derivedState: 'done-unproven' }), item({ id: 'T2', derivedState: 'done-unproven' })] })],
+  });
   assert.equal(isFeatureClosed(model), true);
 });
 
 test('isFeatureClosed is false when the only items are declined: declined never counts as done', () => {
-  const model = feature({ progress: counts({ done: 0, total: 1, percentage: 0 }) });
+  const model = feature({ sections: [section({ items: [item({ id: 'T1', derivedState: 'declined' })] })] });
+  assert.equal(isFeatureClosed(model), false);
+});
+
+test('isFeatureClosed is false when a non-progress-bearing section still has an open item, even though every progress-bearing section is done (T19)', () => {
+  // progress (see T5) is deliberately computed over only the sections that
+  // count toward it, so a feature can be "done" by that ratio while an
+  // "Acceptance criteria" section — which never counts toward progress —
+  // still lists work the Open filter admits. isFeatureClosed must agree
+  // with the Open filter about what "nothing left" means, so it reads
+  // every rendered section, not only the progress-bearing ones.
+  const model = feature({
+    progress: counts({ done: 1, total: 1, percentage: 100 }),
+    sections: [
+      section({ heading: 'Tasks', kind: 'tasks', countsTowardProgress: true, items: [item({ id: 'T1', derivedState: 'done' })] }),
+      section({
+        heading: 'Acceptance criteria',
+        kind: 'acceptance-criteria',
+        countsTowardProgress: false,
+        items: [item({ id: 'A1', derivedState: 'open' })],
+      }),
+    ],
+  });
   assert.equal(isFeatureClosed(model), false);
 });
 
 // --- compareFeatures ---------------------------------------------------------
 
+const OPEN_SECTIONS = [section({ items: [item({ id: 'T1', derivedState: 'open' })] })];
+const CLOSED_SECTIONS = [section({ items: [item({ id: 'T1', derivedState: 'done' })] })];
+
 test('compareFeatures sorts a closed feature after an open one, regardless of name', () => {
-  const open = feature({ featureName: 'zzz-open', progress: counts({ done: 1, total: 2, percentage: 50 }) });
-  const closed = feature({ featureName: 'aaa-closed', progress: counts({ done: 2, total: 2, percentage: 100 }) });
+  const open = feature({ featureName: 'zzz-open', sections: OPEN_SECTIONS });
+  const closed = feature({ featureName: 'aaa-closed', sections: CLOSED_SECTIONS });
   assert.ok(compareFeatures(closed, open) > 0);
   assert.ok(compareFeatures(open, closed) < 0);
 });
 
 test('compareFeatures orders two open features by name', () => {
-  const a = feature({ featureName: 'alpha' });
-  const b = feature({ featureName: 'beta' });
+  const a = feature({ featureName: 'alpha', sections: OPEN_SECTIONS });
+  const b = feature({ featureName: 'beta', sections: OPEN_SECTIONS });
   assert.ok(compareFeatures(a, b) < 0);
   assert.ok(compareFeatures(b, a) > 0);
 });
 
 test('compareFeatures orders two closed features by name within the closed group', () => {
-  const closedProgress = counts({ done: 1, total: 1, percentage: 100 });
-  const a = feature({ featureName: 'alpha', progress: closedProgress });
-  const b = feature({ featureName: 'beta', progress: closedProgress });
+  const a = feature({ featureName: 'alpha', sections: CLOSED_SECTIONS });
+  const b = feature({ featureName: 'beta', sections: CLOSED_SECTIONS });
   assert.ok(compareFeatures(a, b) < 0);
 });
 
