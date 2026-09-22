@@ -1141,6 +1141,15 @@ accumulated in the store, three of them from the T13 arc including one left esca
 its targeted validator rejected a correction. None blocks anything, but they should be
 disposed of deliberately rather than left behind.
 
+**Version 1.0.1 followed the same day, and it is worth recording why.** The 1.0.0 release
+went out with no licence at all: no file, no `license` field, no mention in the README.
+GitHub reports an unlicensed public repository as all rights reserved, so strictly nobody
+could have legally used the extension that had just been published for them to use. The
+owner chose MIT. Because the already-published artifact carried no licence text inside it,
+the fix could not be a quiet amendment of 1.0.0; it needed a new artifact, which is why
+`v1.0.1` exists. A packaging test now asserts the licence travels inside the `.vsix`, so a
+future change that drops it fails a test rather than shipping unnoticed.
+
 Publishing to the Visual Studio Marketplace is the remaining step and is not this
 document's to take: it needs the owner's own Azure DevOps publisher token.
 
