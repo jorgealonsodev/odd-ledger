@@ -107,6 +107,12 @@ test('carries no root PRD document', async () => {
   assert.ok(!files.includes('PRD.md'));
 });
 
+test('carries no README screenshot: the Marketplace reads images/ over HTTPS from the repository, not from the package', async () => {
+  const files = await packagedFiles();
+  const imageFiles = files.filter((file) => file.startsWith('images/'));
+  assert.deepEqual(imageFiles, []);
+});
+
 test('carries no stray source map from a non-production build', async () => {
   const files = await packagedFiles();
   const mapFiles = files.filter((file) => file.endsWith('.js.map'));

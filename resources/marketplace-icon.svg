@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!--
+    The Marketplace listing icon. Unlike the activity bar icon, which VS Code
+    treats as an alpha silhouette and tints by theme, this one is shown exactly
+    as drawn, so it carries real colour and has to read on both a light and a
+    dark listing page. Hence the filled dark plate behind everything.
+
+    The checklist is the subject, as it is in the activity bar icon, so the two
+    read as the same product. The method is named as the first item's own text
+    rather than as a title above the list, which keeps the list the thing the
+    eye lands on.
+
+    The last row is the distinction this extension exists for: the same closed
+    tick, in amber, because that task records no evidence and a tick alone
+    proves nothing. Three rows and not five, since at the size a marketplace
+    list renders this, further rows stop being shapes and become noise.
+
+    The lettering is drawn as paths rather than as a text element, so the icon
+    renders identically on a machine lacking whatever font that text would have
+    named.
+  -->
+
+  <rect width="256" height="256" rx="56" fill="#1B2330"/>
+
+  <!-- Clipboard body -->
+  <rect x="50" y="48" width="156" height="170" rx="18" fill="#E8EDF5"/>
+  <!-- Clip tab -->
+  <rect x="101" y="30" width="54" height="32" rx="10" fill="#9AA7BC"/>
+  <rect x="110" y="39" width="36" height="14" rx="6" fill="#1B2330"/>
+
+  <!-- First item: closed, proven, and it names the method -->
+  <path d="M70 100 L82 112 L104 90"
+        fill="none" stroke="#2EA043" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#1B2330" fill-rule="evenodd" transform="translate(84.5,45.5) scale(0.47)">
+    <path d="M85 78a23 23 0 0 1 23 23v14a23 23 0 0 1-46 0v-14a23 23 0 0 1 23-23Zm0 16a7 7 0 0 0-7 7v14a7 7 0 0 0 14 0v-14a7 7 0 0 0-7-7Z"/>
+    <path d="M116 78h17a23 23 0 0 1 23 23v14a23 23 0 0 1-23 23h-17V78Zm16 16v28h1a7 7 0 0 0 7-7v-14a7 7 0 0 0-7-7h-1Z"/>
+    <path d="M164 78h17a23 23 0 0 1 23 23v14a23 23 0 0 1-23 23h-17V78Zm16 16v28h1a7 7 0 0 0 7-7v-14a7 7 0 0 0-7-7h-1Z"/>
+  </g>
+
+  <!-- Second item: closed and proven -->
+  <path d="M70 152 L82 164 L104 142"
+        fill="none" stroke="#2EA043" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="118" y="147" width="68" height="12" rx="6" fill="#9AA7BC"/>
+
+  <!-- Third item: the same tick, recording nothing, which is why it is not green -->
+  <path d="M70 200 L82 212 L104 190"
+        fill="none" stroke="#D29922" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="118" y="195" width="68" height="12" rx="6" fill="#9AA7BC"/>
+</svg>

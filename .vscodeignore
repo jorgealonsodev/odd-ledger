@@ -21,6 +21,11 @@ odd/**
 .codegraph/**
 .atl/**
 
+# README screenshots. The Marketplace reads these straight from the
+# repository over HTTPS via the absolute URLs README.md uses, never from
+# the packaged extension, so shipping them here would be dead weight.
+images/**
+
 # Compiled test output. Domain tests run from here under node --test, but
 # the runtime code is the bundle in dist/, not this directory.
 out/**
@@ -44,3 +49,8 @@ package-lock.json
 # Never shipped.
 *.vsix
 .vscode-test/
+
+# The Marketplace icon's SVG source. Only the rendered resources/icon.png is
+# read, by the Marketplace listing and never at runtime, so the source stays in
+# the repository for re-rendering and does not need to travel in the package.
+resources/marketplace-icon.svg
