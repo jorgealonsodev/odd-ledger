@@ -320,11 +320,58 @@ user's decisions under ordinary repository policy.
       passive, so the reviewed boundary advanced past it.
       Ten advisory findings, none blocking, are listed under Progress as follow-ups.
 
-- [ ] T8 Tree view: features, sections, tasks
+- [x] T8 Tree view: features, sections, tasks
       State icons, ID as written, `done/total`, the unproven badge, the branch when named,
       the commit reference as a second line, and `## Next step` pinned as the feature's
       last child.
-      Route: delegated writer.
+      Route: delegated writer. Trigger evidence: 9 non-trivial files across both layers.
+      DONE `218c8a5`.
+      A new domain module, `buildFeatureModel`, composes the three existing parsers into
+      one plain model, so every rule this task adds stays testable without an editor:
+      branch extraction from the preamble, next-step extraction, commit-reference
+      extraction, and the filter that hides prose-only sections. `hasCommitReference` now
+      delegates to an exported `extractCommitReference` rather than carrying a second copy
+      of the regex.
+      The adapter becomes four node kinds — feature, section, task, next step —
+      discriminated by an explicit `kind` field rather than `instanceof`, each carrying a
+      real `parent`, because the `reveal` API T9 needs a working `getParent` at every
+      level. The next-step node is pushed last, after the sections.
+      **A tree item has no second line.** The PRD asks for the commit reference on one, so
+      the closest honest equivalent in this API is the item's `description`, and the code
+      says so where it formats it. A `done-unproven` task spends that same slot on
+      `checked, no evidence recorded`, because naming the absence matters more than
+      repeating a reference it does not have.
+      Absence is stated, not blank: a feature with no branch says `no branch recorded` in
+      its tooltip, and a document with no `## Next step` grows no next-step child at all.
+      Fixtures gained a third invented document so both the present and the absent cases
+      are observable: one document carries a bold `**Branch**:` line, a done-unproven task,
+      a `- [~]` item and two item-bearing sections; another carries a plain `Branch:` line
+      and a next step; the third still records neither, which is what makes the absent case
+      real rather than asserted against nothing.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 110 tests, 109 pass,
+      1 skipped (the opt-in real-corpus check); `npm run test:extension` 31 passing in the
+      no-folder profile and 12 in the workspace profile; `npm run bundle` exit 0; `grep`
+      over `src/domain/` for a `vscode` import returns clean. RED observed first as
+      `TS2724` on the missing `extractCommitReference` export, then `TS2307` on the missing
+      `build-feature-model` module, then `TS2305` on the four missing node exports. Two
+      assertions that passed on their first run were falsified against deliberately broken
+      implementations — removing the rawText fallback for commit references, and pushing
+      the next-step node first instead of last — then reverted and confirmed byte-identical.
+      Review: RDD assess over `67d3488..218c8a5` returned risk **medium**
+      (executable change in the adapter test file, 1,231 lines, slice budget reached).
+      Consent granted by the user. Lineage `review-37bf3338d6926947`, one lens
+      (`review-reliability`). **Approved with zero blocking findings, acknowledged,
+      authority burned.** Seven advisory findings; one of them describes a real input class
+      and is raised as T18 below, the rest are recorded under Progress.
+
+- [ ] T18 A Next step written as a checklist item renders twice
+      The section filter keeps every section holding at least one checklist item, and the
+      next step is additionally emitted as its own node, so a document whose `## Next step`
+      is written as a list item renders it in both places. Raised by the T8 review as an
+      advisory finding; it is a task rather than a note because it describes a document
+      shape the corpus can actually produce, and the fix is a decision about which of the
+      two renderings wins, not a typo.
+      Route: direct inline.
 
 - [ ] T9 Tree behaviour: filter and ordering
       `All` / `Open` / `Unproven`; fully-closed features sorted last and muted; reveal the
@@ -402,7 +449,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 7 of 17 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 8 of 18 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -425,7 +472,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 7 of 17 tasks cl
 | `288eea6` | Corpus excerpts the first anonymisation pass missed, removed |
 | `ee74937` | T7 activity bar container, view and welcome content |
 | `f798fc9` | T7 recorded as implemented and awaiting its review |
-| next commit | T7 review approved, recorded as closed; this document |
+| `67d3488` | T7 review approved, recorded as closed |
+| `218c8a5` | T8 feature, section, task and next-step nodes |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -461,6 +509,18 @@ disposed. Three suggestions: the welcome text names one cause for a state reache
 three situations; the shared zero-count constant is returned by reference and not frozen;
 every render does synchronous file reads on the extension host thread.
 
+**Advisory findings from the T8 review (2026-09-22), none blocking.** One became T18. Of
+the rest, three are worth naming: `buildFeatureModel` reads a section's heading line from
+one array and everything else from another, relying on a 1:1 alignment that only a comment
+asserts and no test pins, and no test asserts a section's heading line at all; the widened
+unreadable-document fallback now returns a whole empty model and still nothing exercises
+it, which is the same untested catch branch the T7 review already raised; and
+`extractNextStep` returns the first physical line, so a hard-wrapped next step is cut at
+the source wrap rather than at a sentence boundary. Three suggestions: a domain test is
+named for a function it never calls; the trailing-punctuation stripper is applied to every
+branch value including code spans and is covered by no test; and the string
+`checked, no evidence recorded` is written twice with nothing pinning the two together.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -472,5 +532,6 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T8: the tree view's feature, section and task nodes. The reviewed boundary is the
-commit that records this closure, the last one in the Progress table.
+Next is T9: the tree's filter and ordering, which also absorbs two ordering findings the
+T7 review raised. The reviewed boundary is the commit that records this closure, the last
+one in the Progress table.
