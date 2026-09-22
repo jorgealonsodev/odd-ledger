@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+The project is now published under the MIT licence, and the licence text ships inside the
+installable artifact itself rather than only living in the repository. The 1.0.0 artifact
+went out with no licence file at all: GitHub reports an unlicensed public repository as all
+rights reserved, so strictly nobody could have legally used that release. `package.json`
+now also declares `license`, `bugs` and `homepage`, which the Marketplace listing surfaces
+but which 1.0.0 left unset.
+
 ## 1.0.0
 
 First release. ODD Ledger reads the feature documents under a project's `odd/` folder and

@@ -61,6 +61,15 @@ test('ships the bundled extension entry point', async () => {
   assert.ok(files.includes(BUNDLED_ENTRY_POINT), `expected ${BUNDLED_ENTRY_POINT} in the package`);
 });
 
+test('ships a licence file, so the installable artifact carries its own terms', async () => {
+  const files = await packagedFiles();
+  const licenceFiles = files.filter((file) => /^licen[sc]e(\.|$)/i.test(file));
+  assert.ok(
+    licenceFiles.length > 0,
+    `expected a licence file in the package; files found at the root: ${files.filter((file) => !file.includes('/')).join(', ') || '(none)'}`,
+  );
+});
+
 test('carries no test file', async () => {
   const files = await packagedFiles();
   const testFiles = files.filter((file) => /\.(test|workspace-test|optional\.test)\.(ts|js)$/.test(file));

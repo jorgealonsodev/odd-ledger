@@ -3,12 +3,17 @@
   "displayName": "ODD Ledger",
   "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
   "icon": "resources/icon.png",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "jorgealonsodev",
   "repository": {
     "type": "git",
     "url": "https://github.com/jorgealonsodev/odd-ledger.git"
   },
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/jorgealonsodev/odd-ledger/issues"
+  },
+  "homepage": "https://github.com/jorgealonsodev/odd-ledger#readme",
   "engines": {
     "vscode": "^1.85.0"
   },

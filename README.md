@@ -81,4 +81,10 @@ policy that denies everything except one stylesheet and the icon font. Markdown 
 with raw HTML escaped, images off, and links restricted to `http`, `https` and `mailto`.
 Hovers are untrusted, so a document cannot hide a command behind one.
 
+## Licence
+
+ODD Ledger is released under the MIT licence, which permits using, copying, modifying and
+redistributing it, including for commercial purposes, as long as the copyright notice is
+kept. See [LICENSE](LICENSE) for the full text.
+
 Requires VS Code 1.85 or later.
