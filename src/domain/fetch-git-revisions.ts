@@ -7,7 +7,7 @@
  * This is the first code in this extension that executes an external
  * process, so it is also the first that can be attacked through its
  * arguments. Every argument is passed as its own literal element of an
- * array to execFileSync — never assembled into a shell command string, and
+ * array to execFile — never assembled into a shell command string, and
  * `exec`/`execSync` are never used — so a document path that begins with a
  * dash or contains spaces can never be read as a git flag or split into
  * more than one argument. The repository directory is passed with git's own
@@ -18,41 +18,58 @@
  * git not being installed are all normal states, not errors: any failure
  * here — a non-zero exit, a timeout, or output that does not parse into a
  * usable revision — is treated as "no history available" by returning an
- * empty array (or skipping just that one revision), never by throwing. The
+ * empty result (or skipping just that one revision), never by throwing. The
  * detail panel still renders the rest of the document either way.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { parseGitLogOutput } from './parse-git-log';
 import type { HistoryRevisionInput } from './build-history';
+
+const execFileAsync = promisify(execFile);
 
 const GIT_TIMEOUT_MS = 5000;
 const GIT_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
-/**
- * Runs one git subcommand under `repoRoot` and returns its stdout, or
- * `null` for any failure: a non-zero exit (not a repository, no commits
- * yet, an unreadable object), a timeout, or git not being installed at all
- * (`ENOENT`). Never throws.
- *
- * `GIT_PAGER` and `GIT_TERMINAL_PROMPT` are overridden so a `core.pager`
- * setting or a credential prompt can never make this call interactive or
- * wait on a terminal that does not exist here; nothing else about the
- * caller's environment or git configuration is touched, and no shell is
- * invoked, so no alias or hook a shell profile might define is ever
- * consulted.
- */
-function runGit(repoRoot: string, args: readonly string[]): string | null {
+/** Caps fetched revisions so spawns, memory and chart points stay bounded. */
+export const MAX_FETCHED_REVISIONS = 50;
+
+/** `quotePath=false` keeps a non-ASCII path unquoted; the rest neutralise repo-local config keys that could spawn a command. */
+const GIT_CONFIG_OVERRIDES = ['-c', 'core.quotePath=false', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=', '-c', 'diff.external='];
+
+/** Deleted from the child env: git resolves these before `-C`. */
+const GIT_LOCATION_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES'];
+
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' };
+  for (const key of GIT_LOCATION_ENV_VARS) {
+    delete env[key];
+  }
+  return env;
+}
+
+/** Runs one git subcommand under `repoRoot`; `null` on any failure. */
+async function runGit(repoRoot: string, args: readonly string[]): Promise<string | null> {
   try {
-    return execFileSync('git', ['-C', repoRoot, ...args], {
+    const { stdout } = await execFileAsync('git', ['-C', repoRoot, ...GIT_CONFIG_OVERRIDES, ...args], {
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: GIT_MAX_BUFFER_BYTES,
       encoding: 'utf-8',
-      env: { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' },
+      env: gitEnv(),
     });
+    return stdout;
   } catch {
     return null;
   }
+}
+
+/** Revisions read, whether the cap truncated a longer history, and how many
+ * in-range revisions could not be read back. */
+export interface FetchedRevisions {
+  readonly revisions: HistoryRevisionInput[];
+  readonly truncated: boolean;
+  readonly skippedCount: number;
 }
 
 /**
@@ -69,36 +86,44 @@ function runGit(repoRoot: string, args: readonly string[]): string | null {
  * the repository's top level, which `git show` resolves correctly
  * regardless of what directory `-C` pointed at), never a path recomputed
  * from `documentPath`, which would be wrong for any commit before the
- * rename.
+ * rename. `--max-count` asks one more than MAX_FETCHED_REVISIONS, so an
+ * exact cap is told apart from a history exactly that long.
  *
- * Returns an empty array for every state that is not "a readable history
+ * Returns an empty result for every state that is not "a readable history
  * exists": no repository, no commits yet, the document never committed,
  * git not installed, or a log whose output did not parse into any usable
  * record. A revision whose content could not be read back with `git show`
- * (a corrupt object, for instance) is skipped rather than discarding every
- * other revision that did read back cleanly.
+ * (a corrupt object, for instance) is skipped and counted in
+ * `skippedCount`, rather than discarding every other revision that did
+ * read back cleanly.
  */
-export function fetchDocumentRevisions(repoRoot: string, documentPath: string): HistoryRevisionInput[] {
-  const logOutput = runGit(repoRoot, [
+export async function fetchDocumentRevisions(repoRoot: string, documentPath: string): Promise<FetchedRevisions> {
+  const logOutput = await runGit(repoRoot, [
     'log',
     '--follow',
     '--name-only',
     '--pretty=format:%H%x09%cI',
+    `--max-count=${MAX_FETCHED_REVISIONS + 1}`,
     '--',
     documentPath,
   ]);
   if (logOutput === null) {
-    return [];
+    return { revisions: [], truncated: false, skippedCount: 0 };
   }
 
   const records = parseGitLogOutput(logOutput);
+  const truncated = records.length > MAX_FETCHED_REVISIONS;
+  const boundedRecords = truncated ? records.slice(0, MAX_FETCHED_REVISIONS) : records;
+
   const revisions: HistoryRevisionInput[] = [];
-  for (const record of records) {
-    const text = runGit(repoRoot, ['show', `${record.hash}:${record.path}`]);
+  let skippedCount = 0;
+  for (const record of boundedRecords) {
+    const text = await runGit(repoRoot, ['show', `${record.hash}:${record.path}`]);
     if (text === null) {
+      skippedCount++;
       continue;
     }
     revisions.push({ hash: record.hash, date: record.date, text });
   }
-  return revisions;
+  return { revisions, truncated, skippedCount };
 }

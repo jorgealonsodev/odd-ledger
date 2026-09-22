@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(refreshCommand);
 
-  const openFeatureCommand = vscode.commands.registerCommand('oddLedger.openFeature', (node?: FeatureNode) => {
+  const openFeatureCommand = vscode.commands.registerCommand('oddLedger.openFeature', async (node?: FeatureNode) => {
     if (!node) {
       // Invoked with no argument, e.g. from the command palette rather
       // than by clicking a tree item: there is no feature to show.
@@ -43,8 +43,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // directory and node.model.documentPath as a separate argument, so
     // this is the same resolution the subtitle's path already uses, never
     // a second, independent guess at where the repository lives.
-    const revisions = fetchDocumentRevisions(workspaceRoot, node.model.documentPath);
-    const history = buildHistory(revisions);
+    const { revisions, truncated, skippedCount } = await fetchDocumentRevisions(workspaceRoot, node.model.documentPath);
+    const history = buildHistory(revisions, { truncated, skippedCount });
     const lastWork = mostRecentWorkDate(history);
     detailPanel.show(node.model, workspaceRoot, lastWork, history);
   });

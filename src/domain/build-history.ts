@@ -114,13 +114,26 @@ function dateOnly(isoDateTime: string): string {
   return isoDateTime.slice(0, 10);
 }
 
-function formatSummary(points: readonly HistoryPoint[]): string {
-  if (points.length === 1) {
-    return `1 revision in git, on ${points[0].date}.`;
+/** A degraded read, from FetchedRevisions; both default to "no degradation". */
+export interface BuildHistoryOptions {
+  readonly truncated?: boolean;
+  readonly skippedCount?: number;
+}
+
+function formatSummary(points: readonly HistoryPoint[], truncated: boolean, skippedCount: number): string {
+  const base =
+    points.length === 1
+      ? `1 revision in git, on ${points[0].date}.`
+      : `${points.length} revisions in git, ${points[0].date} to ${points[points.length - 1].date}.`;
+
+  const notes: string[] = [];
+  if (truncated) {
+    notes.push(`showing only the most recent ${points.length}`);
   }
-  const first = points[0].date;
-  const last = points[points.length - 1].date;
-  return `${points.length} revisions in git, ${first} to ${last}.`;
+  if (skippedCount > 0) {
+    notes.push(`${skippedCount} revision${skippedCount === 1 ? '' : 's'} in range could not be read and ${skippedCount === 1 ? 'is' : 'are'} not included`);
+  }
+  return notes.length === 0 ? base : `${base} (${notes.join('; ')}.)`;
 }
 
 /**
@@ -129,9 +142,10 @@ function formatSummary(points: readonly HistoryPoint[]): string {
  * `revisions` is expected newest-first — the order `git log` itself
  * returns, and the order fetch-git-revisions.ts preserves — and is
  * reversed here so the sentence's date range and the chart's points both
- * read oldest to newest, left to right.
+ * read oldest to newest, left to right. `options` states a degraded read.
  */
-export function buildHistory(revisions: readonly HistoryRevisionInput[]): FeatureHistory {
+export function buildHistory(revisions: readonly HistoryRevisionInput[], options: BuildHistoryOptions = {}): FeatureHistory {
+  const { truncated = false, skippedCount = 0 } = options;
   if (revisions.length === 0) {
     return UNAVAILABLE_HISTORY;
   }
@@ -145,7 +159,7 @@ export function buildHistory(revisions: readonly HistoryRevisionInput[]): Featur
 
   return {
     available: true,
-    summary: formatSummary(points),
+    summary: formatSummary(points, truncated, skippedCount),
     points,
     showChart: points.length >= CHART_THRESHOLD_REVISIONS,
   };

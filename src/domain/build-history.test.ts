@@ -124,6 +124,20 @@ test('the PRD\'s own two-revision example stays a sentence, never a chart', () =
   assert.equal(history.showChart, false);
 });
 
+// --- a degraded read is stated as degraded, not presented as complete ------
+
+test('a truncated fetch states it is showing only the most recent N, not the whole history', () => {
+  const revisions: HistoryRevisionInput[] = [revision({ date: '2026-09-21T09:00:00+00:00' })];
+  const history = buildHistory(revisions, { truncated: true });
+  assert.match(history.summary, /^1 revision in git, on 2026-09-21\. \(showing only the most recent 1\.\)$/);
+});
+
+test('skipped revisions are counted in the summary rather than silently shrinking the total', () => {
+  const revisions: HistoryRevisionInput[] = [revision({ date: '2026-09-21T09:00:00+00:00' })];
+  const history = buildHistory(revisions, { skippedCount: 2 });
+  assert.match(history.summary, /^1 revision in git, on 2026-09-21\. \(2 revisions in range could not be read and are not included\.\)$/);
+});
+
 // --- mostRecentWorkDate ------------------------------------------------------
 
 test('mostRecentWorkDate is the newest revision\'s date', () => {

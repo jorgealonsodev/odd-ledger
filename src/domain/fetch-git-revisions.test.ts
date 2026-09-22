@@ -24,11 +24,16 @@ function isGitAvailable(): boolean {
 
 const GIT_AVAILABLE = isGitAvailable();
 
+/** Pins the settings these tests depend on rather than the machine's global
+ * config: an explicit initial branch, signing off, and an unset hooks path
+ * (nonexistent, so nothing globally configured ever runs). */
 function makeRepo(): string {
   const root = mkdtempSync(join(tmpdir(), 'odd-ledger-git-history-'));
-  execFileSync('git', ['-C', root, 'init', '-q']);
+  execFileSync('git', ['-C', root, 'init', '-q', '-b', 'main']);
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Test']);
+  execFileSync('git', ['-C', root, 'config', 'commit.gpgsign', 'false']);
+  execFileSync('git', ['-C', root, 'config', 'core.hooksPath', join(root, '.empty-hooks')]);
   return root;
 }
 
@@ -47,7 +52,7 @@ function commit(repoRoot: string, message: string, isoDate: string, ...relativeP
   });
 }
 
-test('a document with several commits: one revision per commit, newest first, each with its own text and date', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, () => {
+test('a document with several commits: one revision per commit, newest first, each with its own text and date', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
   const root = makeRepo();
   try {
     mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
@@ -62,7 +67,7 @@ test('a document with several commits: one revision per commit, newest first, ea
     writeFileSync(docPath, '# sample-feature\n\n## Tasks\n\n- [x] T1 first\n- [ ] T2 second\n');
     commit(root, 'third', '2026-09-12T10:00:00+00:00', 'odd/tasks/sample-feature.md');
 
-    const revisions = fetchDocumentRevisions(root, docPath);
+    const { revisions } = await fetchDocumentRevisions(root, docPath);
 
     assert.equal(revisions.length, 3);
     // Newest first, the same order git log itself returns.
@@ -80,7 +85,7 @@ test('a document with several commits: one revision per commit, newest first, ea
   }
 });
 
-test('a document that follows a rename: the revision before the rename reads back under its old name', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, () => {
+test('a document that follows a rename: the revision before the rename reads back under its old name', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
   const root = makeRepo();
   try {
     mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
@@ -100,7 +105,7 @@ test('a document that follows a rename: the revision before the rename reads bac
 
     // Queried under its current (post-rename) path, --follow reaches back
     // to the commit recorded under the old name.
-    const revisions = fetchDocumentRevisions(root, newPath);
+    const { revisions } = await fetchDocumentRevisions(root, newPath);
 
     assert.equal(revisions.length, 3);
     const oldestText = revisions[revisions.length - 1].text;
@@ -111,7 +116,25 @@ test('a document that follows a rename: the revision before the rename reads bac
   }
 });
 
-test('a file not yet committed: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, () => {
+test('a document with a non-ASCII filename: history is still found although core.quotePath would otherwise C-quote the path', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
+  const root = makeRepo();
+  try {
+    mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
+    const docPath = join(root, 'odd', 'tasks', 'café-feature.md');
+
+    writeFileSync(docPath, '# café-feature\n\n## Tasks\n\n- [ ] T1 first\n');
+    commit(root, 'first', '2026-09-10T10:00:00+00:00', 'odd/tasks/café-feature.md');
+
+    const { revisions } = await fetchDocumentRevisions(root, docPath);
+
+    assert.equal(revisions.length, 1);
+    assert.match(revisions[0].text, /café-feature/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('a file not yet committed: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
   const root = makeRepo();
   try {
     // At least one unrelated commit so the repository has a HEAD; log on
@@ -125,7 +148,7 @@ test('a file not yet committed: no revisions, not an error', { skip: !GIT_AVAILA
     const docPath = join(root, 'odd', 'tasks', 'untracked-feature.md');
     writeFileSync(docPath, '# untracked-feature\n');
 
-    const revisions = fetchDocumentRevisions(root, docPath);
+    const { revisions } = await fetchDocumentRevisions(root, docPath);
 
     assert.deepEqual(revisions, []);
   } finally {
@@ -133,14 +156,14 @@ test('a file not yet committed: no revisions, not an error', { skip: !GIT_AVAILA
   }
 });
 
-test('a repository with no commits at all: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, () => {
+test('a repository with no commits at all: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
   const root = makeRepo();
   try {
     mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
     const docPath = join(root, 'odd', 'tasks', 'sample-feature.md');
     writeFileSync(docPath, '# sample-feature\n');
 
-    const revisions = fetchDocumentRevisions(root, docPath);
+    const { revisions } = await fetchDocumentRevisions(root, docPath);
 
     assert.deepEqual(revisions, []);
   } finally {
@@ -148,14 +171,14 @@ test('a repository with no commits at all: no revisions, not an error', { skip: 
   }
 });
 
-test('a directory that is not a git repository: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, () => {
+test('a directory that is not a git repository: no revisions, not an error', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'odd-ledger-git-history-notrepo-'));
   try {
     mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
     const docPath = join(root, 'odd', 'tasks', 'sample-feature.md');
     writeFileSync(docPath, '# sample-feature\n');
 
-    const revisions = fetchDocumentRevisions(root, docPath);
+    const { revisions } = await fetchDocumentRevisions(root, docPath);
 
     assert.deepEqual(revisions, []);
   } finally {
