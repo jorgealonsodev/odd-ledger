@@ -8,10 +8,10 @@
  * wording, path formatting, region order and omission, escaping) stays in
  * src/domain/, not here.
  *
- * The "Recorded by this document" table (T12) is not implemented yet;
- * RECORDED_BY_DOCUMENT_PLACEHOLDER below marks exactly where it is
- * inserted. Git-derived history (T13) and theming/layout polish (T14) are
- * also later work.
+ * The "Recorded by this document" table (T12) renders the rare contract
+ * fields (TDD, delivery, route, line budget, review), each its value or
+ * "not recorded". Git-derived history (T13) and theming/layout polish
+ * (T14) are still later work.
  */
 
 import { randomBytes } from 'node:crypto';
@@ -22,6 +22,8 @@ import { buildPanelHeader } from '../domain/build-panel-header';
 import { buildPanelBody } from '../domain/build-panel-body';
 import type { PanelBody, PanelBodyDocumentSection } from '../domain/build-panel-body';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
+import { buildRecordedFields } from '../domain/build-recorded-fields';
+import type { RecordedField } from '../domain/build-recorded-fields';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
@@ -167,6 +169,29 @@ function renderPanelBody(body: PanelBody): string {
 }
 
 /**
+ * The "Recorded by this document" table (T12): the five rare contract
+ * fields buildRecordedFields already resolved, each its value or "not
+ * recorded". Every row always renders, per the PRD's own reasoning for
+ * this region — one honest table instead of six empty regions — so there
+ * is no empty-state branch here the way there is for the objective or
+ * other-sections regions above.
+ */
+function renderRecordedByDocument(fields: readonly RecordedField[]): string {
+  const rows = fields
+    .map(
+      (field) => `
+      <tr>
+        <td class="recorded-label">${escapeHtml(field.label)}</td>
+        <td class="recorded-value">${escapeHtml(field.value)}</td>
+      </tr>`,
+    )
+    .join('');
+  return `
+    <h2>Recorded by this document</h2>
+    <table class="recorded-table"><tbody>${rows}</tbody></table>`;
+}
+
+/**
  * Renders the panel's full HTML document. Styles only against VS Code's
  * injected `--vscode-*` CSS variables and the `body.vscode-light`,
  * `body.vscode-dark` and `body.vscode-high-contrast` classes VS Code sets
@@ -176,7 +201,7 @@ function renderPanelBody(body: PanelBody): string {
  * read-only render with nothing to script, so the CSP has no `script-src`
  * exception at all and `default-src 'none'` blocks scripts outright.
  */
-function renderHtml(header: PanelHeader, body: PanelBody): string {
+function renderHtml(header: PanelHeader, body: PanelBody, recordedFields: readonly RecordedField[]): string {
   const nonce = createNonce();
   const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
 
@@ -283,6 +308,26 @@ function renderHtml(header: PanelHeader, body: PanelBody): string {
   body.vscode-high-contrast .task-item {
     border-left-width: 3px;
   }
+  .recorded-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0;
+  }
+  .recorded-table td {
+    padding: 3px 12px 3px 0;
+    vertical-align: top;
+  }
+  .recorded-label {
+    color: var(--vscode-descriptionForeground);
+    white-space: nowrap;
+    font-weight: bold;
+  }
+  .recorded-value {
+    word-break: break-word;
+  }
+  body.vscode-high-contrast .recorded-table td {
+    border-top: 1px solid var(--vscode-panel-border);
+  }
 </style>
 </head>
 <body>
@@ -292,10 +337,7 @@ function renderHtml(header: PanelHeader, body: PanelBody): string {
   ${renderTiles(header)}
   <hr>
   <div id="panel-body">${renderPanelBody(body)}</div>
-  <!-- T12 inserts the "Recorded by this document" table here: TDD,
-       delivery, route, line budget and review, each its value or "not
-       recorded". -->
-  <div id="recorded-by-document"></div>
+  <div id="recorded-by-document">${renderRecordedByDocument(recordedFields)}</div>
 </body>
 </html>`;
 }
@@ -330,10 +372,11 @@ export class FeatureDetailPanel implements vscode.Disposable {
   show(model: FeatureModel, workspaceRoot: string, lastWork: string | null = null): void {
     const header = buildPanelHeader(model, workspaceRoot, lastWork);
     const body = buildPanelBody(model);
+    const recordedFields = buildRecordedFields(model);
 
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
-      this.panel.webview.html = renderHtml(header, body);
+      this.panel.webview.html = renderHtml(header, body, recordedFields);
       this.panel.reveal();
       return;
     }
@@ -347,7 +390,7 @@ export class FeatureDetailPanel implements vscode.Disposable {
       // defaulting it on.
       {},
     );
-    this.panel.webview.html = renderHtml(header, body);
+    this.panel.webview.html = renderHtml(header, body, recordedFields);
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });

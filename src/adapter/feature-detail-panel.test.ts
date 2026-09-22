@@ -278,4 +278,86 @@ suite('FeatureDetailPanel', () => {
     assert.ok(cspMatch![1].length > 0);
     assert.equal(cspMatch![1], styleMatch![1]);
   });
+
+  // --- "Recorded by this document" table (T12) -----------------------------
+
+  /** Pulls the table's label/value pairs out of the rendered HTML, in
+   * document order, so assertions below can check row order and content
+   * directly rather than just checking substrings appear somewhere in the
+   * page — a substring check alone would not fail if the rows were
+   * reordered or one row were duplicated in place of another. */
+  function recordedRows(html: string): Array<{ label: string; value: string }> {
+    const rowRe =
+      /<td class="recorded-label">([^<]*)<\/td>\s*<td class="recorded-value">([^<]*)<\/td>/g;
+    const rows: Array<{ label: string; value: string }> = [];
+    for (const match of html.matchAll(rowRe)) {
+      rows.push({ label: match[1], value: match[2] });
+    }
+    return rows;
+  }
+
+  test('renders the "Recorded by this document" table with all five rows, in order', () => {
+    const text = [
+      '# sample',
+      '',
+      '## TDD mode',
+      '',
+      'Strict, invented convention.',
+      '',
+      '## Delivery',
+      '',
+      'ask-on-risk (default). Forecast: roughly 400 authored changed lines.',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 Ship it',
+      '      Route: delegated writer.',
+      '      Review: assess returned risk low, approved.',
+    ].join('\n');
+    panel = new FeatureDetailPanel();
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /<h2>Recorded by this document<\/h2>/);
+    const rows = recordedRows(html);
+    assert.deepEqual(
+      rows.map((r) => r.label),
+      ['TDD', 'Delivery', 'Route', 'Line budget', 'Review'],
+    );
+    assert.match(rows[0].value, /Strict, invented convention\.?/);
+    assert.match(rows[2].value, /per task, 1 of 1 recorded/);
+    assert.match(rows[3].value, /400/);
+    assert.match(rows[4].value, /approved/);
+  });
+
+  test('a document recording none of the five fields still renders five rows, each reading "not recorded"', () => {
+    const text = ['# sample', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
+    panel = new FeatureDetailPanel();
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const rows = recordedRows(html);
+    assert.deepEqual(
+      rows.map((r) => r.label),
+      ['TDD', 'Delivery', 'Route', 'Line budget', 'Review'],
+    );
+    assert.deepEqual(
+      rows.map((r) => r.value),
+      ['not recorded', 'not recorded', 'not recorded', 'not recorded', 'not recorded'],
+    );
+  });
+
+  test('escapes markup in a recorded field\'s value: no unescaped angle bracket reaches the HTML', () => {
+    const text = ['# sample', '', '## TDD mode', '', '<img src=x onerror=alert(1)>', '', '## Tasks', '', '- [ ] T1 Do it'].join(
+      '\n',
+    );
+    panel = new FeatureDetailPanel();
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const rows = recordedRows(html);
+    const tdd = rows.find((r) => r.label === 'TDD')!;
+    assert.ok(!tdd.value.includes('<img'));
+    assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  });
 });
