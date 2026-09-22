@@ -364,6 +364,27 @@ user's decisions under ordinary repository policy.
       authority burned.** Seven advisory findings; one of them describes a real input class
       and is raised as T18 below, the rest are recorded under Progress.
 
+- [ ] T21 A section holding checklist items renders twice in the panel body
+      The body renders item-bearing sections as task lists and, separately, every
+      recognized optional section as prose. A section that is both — an `Acceptance
+      criteria` heading whose items are checkboxes — appears in both regions. Verified by
+      the parent against this repository's own feature document, which renders
+      `Acceptance criteria` once as a checklist and once as raw text. The fix is a
+      decision about which region wins, not a typo.
+      Route: delegated writer.
+
+- [ ] T22 Three assertions in the panel work do not observe what they name
+      From the T11 review. The no-argument command test samples the webview tab count
+      synchronously around a command whose own file documents that tab state settles
+      asynchronously, so it cannot fail. The workspace-profile test names workspace-root
+      resolution as its subject but asserts only that a tab with the feature name
+      appeared, which the feature name alone produces. And the per-state task glyph and
+      its modifier class are asserted nowhere.
+      **This is the second review in a row to find assertions that cannot fail**, and the
+      first set was itself introduced while closing the same class of finding. That makes
+      it a task rather than a note: the pattern is the defect.
+      Route: delegated writer.
+
 - [ ] T19 Closedness and the `Open` filter disagree about which sections count
       `isFeatureClosed` reads only `progress`, which sums the sections that count toward
       it, while the `Open` filter admits items from every section regardless. A feature
@@ -471,10 +492,39 @@ user's decisions under ordinary repository policy.
       advisory findings; five live in the module T11 extends and are folded into it rather
       than deferred, the rest are recorded under Progress.
 
-- [ ] T11 Detail panel: body
+- [x] T11 Detail panel: body
       Objective and problem, every task with its evidence inline, an unproven task stating
       what is missing, and the optional document sections rendered when present.
-      Route: delegated writer.
+      Route: delegated writer. Trigger evidence: 12 files across both layers.
+      DONE `84b5ddf`.
+      The model now carries the `DocumentStructure` it already parsed, so the body reads
+      the document's prose without parsing the same text a second time. That prose is not
+      on the model otherwise: the section filter keeps only sections holding checklist
+      items, which is what T8 needed and what the body cannot use alone.
+      **Markdown is not rendered.** Section bodies are emitted as escaped preformatted
+      text. This extension has no Markdown renderer, and a partial one written here would
+      misread the very corpus it exists to display.
+      An unproven task states ODD's own sentence about a checkbox proving nothing, from a
+      single exported constant, so the panel and any later renderer cannot drift apart.
+      The tree keeps its own shorter phrasing for now because a tree row has no space for
+      the full sentence; the constant is there when that is revisited.
+      Also closed five findings the T10 review left in this module: the subtitle assertion
+      that could not fail, the tab title that skipped its fallback on the reuse path, the
+      unreached next-step branch, the unproved command handler, and the unasserted nonce
+      pairing. The nonce now comes from `node:crypto` rather than `Math.random`.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 161 tests, 160 pass,
+      1 skipped; `npm run test:extension` 55 passing in the no-folder profile and 17 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean. RED observed first as `TS2339` on the missing `structure`
+      field, then `TS2307` on the missing body module. The vacuous-subtitle fix was proved
+      by breaking the path helper and watching the old test stay green, then watching the
+      repaired one fail against the same break. Four further behaviours were falsified one
+      at a time and reverted byte-identical, confirmed by checksum.
+      Review: RDD assess over `64c3bab..84b5ddf` returned risk **medium** (executable
+      change in an adapter test file, 783 lines, slice budget reached). Consent granted by
+      the user. Lineage `review-80b7be8e1ddfa5e7`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.** Eight
+      advisory findings; they are raised as T21 and T22 below.
 
 - [ ] T12 Detail panel: "Recorded by this document"
       One table of the rare contract fields — TDD, delivery, route, line budget, review —
@@ -537,7 +587,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 10 of 20 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 11 of 22 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -566,6 +616,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 10 of 20 tasks c
 | `77b3ad8` | T9 filter, ordering and reveal-on-click |
 | `6e7db0b` | T9 review approved, recorded as closed; T19 and T20 raised |
 | `934a288` | T10 detail panel header and tiles |
+| `64c3bab` | T10 review approved, recorded as closed |
+| `84b5ddf` | T11 panel body, and five T10 findings closed |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -636,6 +688,22 @@ panel is still the current one; a fallback that names the document's own directo
 project when no workspace folder resolves; and a command invokable from the palette, where
 its guard returns silently with no feedback.
 
+**Advisory findings from the T11 review (2026-09-22), none blocking.** Three became T22
+and one led to T21. The remaining four are recorded here: region omission tests a body's
+raw length while the sibling evidence check trims first, so a whitespace-only section
+still renders; the list of optional section kinds is hand-maintained, so a kind added to
+the parser is silently dropped from the panel until someone remembers this list; duplicate
+headings are handled two ways, with the objective lookup taking the first match and the
+optional-section pass taking all of them; and the empty-structure fallback is one shared
+exported object whose array instance is reused by production and four fixtures.
+
+**Tooling, recorded because it affected this session's work.** The CodeGraph index had
+gone stale: its daemon exits five minutes after its last client disconnects, and a
+delegated writer runs longer than that with no query in between, so nothing watched the
+files for most of each task. Raised the idle timeout and added a resync after each
+subagent. CodeGraph was then upgraded to 1.6.0 at the user's instruction, which required a
+full re-index; the timeout default is unchanged in that version, so both fixes stand.
+
 **Follow-up recorded, not yet a task**: CI pins `node-version: '24'`. The defect corrected
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
@@ -647,6 +715,5 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T11: the detail panel's body, which also closes five findings the T10 review left
-in that module. The reviewed boundary is the commit that records this closure, the last one
-in the Progress table.
+Next is T12: the "Recorded by this document" table. The reviewed boundary is the commit
+that records this closure, the last one in the Progress table.
