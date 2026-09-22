@@ -623,9 +623,46 @@ user's decisions under ordinary repository policy.
       configuration change from the new dependency). Under the review cadence chosen on
       2026-09-22 this accumulates into the current slice rather than being reviewed alone.
 
-- [ ] T15 Refresh on change
+- [x] T15 Refresh on change
       Watch `odd/tasks/*.md` and refresh the tree and any open panel; manual refresh action.
-      Route: direct inline.
+      Route: delegated writer. The route recorded here was `direct inline` and was wrong:
+      the work spans a watcher, a debounce, a panel absence state and their tests across
+      nine files, which is the writer trigger several times over.
+      DONE `c490f35`.
+      **This task existed on paper until the repository owner hit it.** While using the
+      view on 2026-09-22 they read a count of eight from the tree while the document
+      already recorded twelve, with nothing to tell stale data from real data. That is the
+      whole justification, observed rather than argued.
+      One watcher per workspace folder, scoped with a relative pattern rather than one
+      absolute glob, so a multi-root window works and a folder added later is covered.
+      Creating or deleting a document changes which features exist, so the root list is
+      rebuilt rather than a node refreshed, and a panel whose document was deleted states
+      that instead of showing content that is gone.
+      Adding or removing a workspace folder changes what is discovered, so the watchers are
+      rebuilt for the new folder set and the old ones disposed. An earlier review of this
+      feature flagged objects that were never disposed; every watcher and listener here
+      reaches the subscription list.
+      **One save fires several events and a git operation fires many**, so they are
+      coalesced into a single refresh after a short delay. The coalescing lives in the
+      domain layer with its timer injected, which is what lets it be proved by counting
+      instead of by waiting: three triggers produce two cancellations and exactly one run.
+      The parent verified that directly against the compiled module.
+      The watcher reports only which documents were touched, not what happened to each,
+      and the consumer reads the filesystem for current truth when the delay elapses. A
+      create, a change and a delete can race inside one window, and bookkeeping that
+      remembered the event kind would go stale inside it.
+      **One coverage gap, disclosed rather than papered over.** The workspace-folder rebuild
+      path has no test. The writer wrote one, found it mutated persistent editor state and
+      corrupted a later unrelated test profile, and removed it rather than leave a flaky
+      test or a poisoned fixture. That path is therefore covered by reading, not by
+      running, and this document says so rather than letting the suite imply otherwise.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 212 tests, 211 pass,
+      1 skipped; `npm run test:extension` 76 passing in the no-folder profile and 22 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean. RED observed first for each new module. Behaviours that passed
+      on their first run were falsified one at a time and reverted byte-identical, confirmed
+      by checksum, including removing the cancel before rescheduling and disposing the
+      debounce without its child watchers.
 
 - [ ] T16 Package and document
       Extension packaging, README, and the settings reference.
@@ -738,7 +775,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 14 of 24 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 15 of 24 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -780,6 +817,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 14 of 24 tasks c
 | `fd805cf` | T13 simplified: the deferred second render deleted |
 | `63e784f` | T13 recorded as closed with its three review rounds |
 | `c875697` | T14 codicons, high-contrast boundaries and an unclipped chart |
+| `8c8a72e` | T14 recorded as closed; a packaging risk flagged for T16 |
+| `c490f35` | T15 watch the documents and refresh on change |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
 
@@ -894,12 +933,12 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T15, then T16. The cleanup pass (T17 to T24) follows the feature work.
+Next is T16, packaging and documentation, once the current slice's review reaches a
+terminal outcome. The cleanup pass (T17 to T24) follows the feature work.
 
-T15 is worth pulling forward if the tree is being used while this is built. The extension
-has no file watcher yet, so an open view keeps showing whatever it read last; the user hit
-exactly that on 2026-09-22, reading a count of eight while the document already recorded
-twelve. The manual refresh action covers it until T15 lands.
+T14 and T15 form the current slice, 1166 authored changed lines at medium risk, which
+exceeds the delivery budget and closes it. Its review is the next thing to happen, before
+T16 starts.
 
 Two decisions the user took on 2026-09-22, after asking whether the pace suited a VS Code
 extension: review per slice rather than per task, and defer every open defect to a cleanup
