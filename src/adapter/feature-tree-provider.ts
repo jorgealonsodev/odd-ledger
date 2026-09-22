@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
-import { buildFeatureModel } from '../domain/build-feature-model';
+import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import type { ChecklistCounts, DerivedItemState } from '../domain/derive-checklist-state';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
@@ -43,6 +43,7 @@ function emptyFeatureModel(featureName: string, documentPath: string): FeatureMo
     progress: EMPTY_COUNTS,
     sections: [],
     nextStep: null,
+    structure: EMPTY_DOCUMENT_STRUCTURE,
   };
 }
 

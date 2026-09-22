@@ -1,6 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { FeatureModel, ItemModel, SectionModel } from './build-feature-model';
+import { EMPTY_DOCUMENT_STRUCTURE } from './build-feature-model';
 import type { ChecklistCounts, DerivedItemState } from './derive-checklist-state';
 import { compareFeatures, filterFeature, isFeatureClosed } from './filter-and-order-features';
 
@@ -40,6 +41,7 @@ function feature(overrides: Partial<FeatureModel> = {}): FeatureModel {
     progress: counts({ done: 1, total: 2, percentage: 50 }),
     sections: [],
     nextStep: null,
+    structure: EMPTY_DOCUMENT_STRUCTURE,
     ...overrides,
   };
 }

@@ -15,8 +15,20 @@ import { extractCommitReference } from './derive-checklist-state';
 import type { ChecklistCounts, DerivedChecklistItem, DerivedItemState } from './derive-checklist-state';
 import { deriveChecklistState } from './derive-checklist-state';
 import { parseChecklist } from './parse-checklist';
-import type { DocumentSection, SectionKind } from './parse-document-structure';
+import type { DocumentSection, DocumentStructure, SectionKind } from './parse-document-structure';
 import { parseDocumentStructure } from './parse-document-structure';
+
+/** A DocumentStructure describing a document with no H1 and no sections,
+ * used as the FeatureModel.structure fallback for a document that could
+ * not be read or parsed (see feature-tree-provider.ts's emptyFeatureModel)
+ * and reused by test fixtures that hand-build a FeatureModel without
+ * routing it through buildFeatureModel. */
+export const EMPTY_DOCUMENT_STRUCTURE: DocumentStructure = {
+  title: null,
+  titleLine: null,
+  preamble: '',
+  sections: [],
+};
 
 /** The document's `## Next step` line, reduced to what the tree needs: the
  * text to show and the line to reveal when it is clicked (T9). */
@@ -57,7 +69,15 @@ export interface SectionModel {
 
 /** One feature document, fully composed: title, branch (when named), the
  * feature-level progress roll-up, its item-bearing sections, and its next
- * step (when the document records one). */
+ * step (when the document records one).
+ *
+ * `structure` is the DocumentStructure buildFeatureModel already parsed
+ * out of the document's text to build every other field above. It is
+ * carried here, rather than dropped once the checklist and derived state
+ * are computed, so a later consumer that needs the document's non-
+ * checklist prose (T11's detail-panel body: Objective, Problem, and the
+ * document's other optional sections) can read it straight off the model
+ * instead of parsing the same text a second time. */
 export interface FeatureModel {
   readonly featureName: string;
   readonly documentPath: string;
@@ -66,6 +86,7 @@ export interface FeatureModel {
   readonly progress: ChecklistCounts;
   readonly sections: SectionModel[];
   readonly nextStep: NextStepModel | null;
+  readonly structure: DocumentStructure;
 }
 
 /** Matches a metadata line naming the `Branch` label, tolerating every bold
@@ -219,5 +240,6 @@ export function buildFeatureModel(featureName: string, documentPath: string, tex
     progress: derived.progress,
     sections,
     nextStep,
+    structure,
   };
 }

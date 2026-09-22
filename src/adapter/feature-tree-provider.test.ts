@@ -8,6 +8,7 @@ import {
   TaskNode,
 } from './feature-tree-provider';
 import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
+import { EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 
 /**
@@ -60,6 +61,7 @@ function feature(overrides: Partial<FeatureModel> = {}): FeatureModel {
     progress: { done: 1, total: 2, percentage: 50, doneUnproven: 0 },
     sections: [],
     nextStep: null,
+    structure: EMPTY_DOCUMENT_STRUCTURE,
     ...overrides,
   };
 }

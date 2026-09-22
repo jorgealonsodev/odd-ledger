@@ -189,3 +189,17 @@ test('buildFeatureModel over signage-display-driver-v1: no branch, no next step,
   assert.equal(model.progress.done, 2);
   assert.equal(model.progress.total, 3);
 });
+
+// --- buildFeatureModel: threading the parsed DocumentStructure -------------
+
+test('buildFeatureModel also returns the DocumentStructure it parsed, so a caller never parses the text twice', () => {
+  const text = ['# sample', '', '## Objective', '', 'Ship it.', '', '## Tasks', '', '- [ ] T1 Do it'].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+
+  assert.equal(model.structure.title, 'sample');
+  assert.deepEqual(
+    model.structure.sections.map((s) => s.heading),
+    ['Objective', 'Tasks'],
+  );
+  assert.equal(model.structure.sections[0].body, 'Ship it.');
+});

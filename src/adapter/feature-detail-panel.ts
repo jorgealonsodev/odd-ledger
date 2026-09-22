@@ -1,38 +1,43 @@
 /**
- * The detail panel's webview (T10): header, subtitle, next step and the
- * three summary tiles. A thin translation layer only — it asks the domain
- * layer (buildPanelHeader) for already-formatted display data and renders
- * it into HTML. Any decision worth testing without an editor (title
- * choice, tile wording, path formatting, escaping) stays in
- * src/domain/build-panel-header.ts and src/domain/escape-html.ts, not here.
+ * The detail panel's webview: header, subtitle, next step, the three
+ * summary tiles (T10), and the body — objective, tasks with inline
+ * evidence, and the document's other optional sections (T11). A thin
+ * translation layer only — it asks the domain layer (buildPanelHeader,
+ * buildPanelBody) for already-formatted display data and renders it into
+ * HTML. Any decision worth testing without an editor (title choice, tile
+ * wording, path formatting, region order and omission, escaping) stays in
+ * src/domain/, not here.
  *
- * The body (objective, problem, task list — T11) and the "Recorded by this
- * document" table (T12) are not implemented yet; PANEL_BODY_PLACEHOLDER
- * and RECORDED_BY_DOCUMENT_PLACEHOLDER below mark exactly where they are
+ * The "Recorded by this document" table (T12) is not implemented yet;
+ * RECORDED_BY_DOCUMENT_PLACEHOLDER below marks exactly where it is
  * inserted. Git-derived history (T13) and theming/layout polish (T14) are
  * also later work.
  */
 
+import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
 import type { FeatureModel } from '../domain/build-feature-model';
 import type { PanelHeader } from '../domain/build-panel-header';
 import { buildPanelHeader } from '../domain/build-panel-header';
+import { buildPanelBody } from '../domain/build-panel-body';
+import type { PanelBody, PanelBodyDocumentSection } from '../domain/build-panel-body';
+import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
+import type { DerivedItemState } from '../domain/derive-checklist-state';
+import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
 
 const VIEW_TYPE = 'oddLedger.featureDetail';
 const VIEW_TITLE_FALLBACK = 'ODD Ledger';
 
-const NONCE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
 /** A fresh per-render nonce for the Content-Security-Policy's `style-src`,
  * so the CSP can stay `default-src 'none'` plus one nonce-scoped exception
- * instead of the much looser `'unsafe-inline'`. */
+ * instead of the much looser `'unsafe-inline'`. Drawn from `node:crypto`
+ * rather than `Math.random`: a value used as a policy token should not
+ * come from a predictable, non-cryptographic source, even though nothing
+ * in this read-only, script-free panel currently exploits a predictable
+ * nonce. */
 function createNonce(): string {
-  let nonce = '';
-  for (let i = 0; i < 32; i++) {
-    nonce += NONCE_CHARS.charAt(Math.floor(Math.random() * NONCE_CHARS.length));
-  }
-  return nonce;
+  return randomBytes(16).toString('hex');
 }
 
 function formatSubtitle(header: PanelHeader): string {
@@ -73,6 +78,95 @@ function renderTiles(header: PanelHeader): string {
 }
 
 /**
+ * The body's Objective region: the document's Objective and Problem
+ * sections' prose (already joined by buildPanelBody). Markdown is not
+ * rendered to HTML here — a Markdown renderer is a dependency this
+ * extension does not carry, and a partial hand-rolled one would misrender
+ * the real corpus in ways worse than showing it as plain text — so the
+ * text is escaped and kept in a `<pre>` to preserve the document's own
+ * line breaks and whitespace.
+ */
+function renderObjective(body: PanelBody): string {
+  if (body.objective === null) {
+    return '';
+  }
+  return `
+    <h2>Objective</h2>
+    <pre class="prose">${escapeHtml(body.objective)}</pre>`;
+}
+
+const STATE_GLYPH: Record<DerivedItemState, string> = {
+  open: '☐',
+  done: '☑',
+  'done-unproven': '⚠',
+  declined: '⊘',
+  unknown: '?',
+};
+
+function formatTaskLine(item: ItemModel): string {
+  return item.id ? `${item.id}  ${item.title}` : item.title;
+}
+
+/**
+ * A task's evidence line: the ODD unproven statement for a done-unproven
+ * item (the item itself, by construction, records no evidence and no
+ * commit reference — see deriveChecklistState), the item's own evidence
+ * text when it recorded any, or nothing at all otherwise. Never Markdown-
+ * rendered, for the same reason renderObjective is not.
+ */
+function renderTaskEvidence(item: ItemModel): string {
+  if (item.derivedState === 'done-unproven') {
+    return `<pre class="task-evidence task-unproven">${escapeHtml(UNPROVEN_TASK_MESSAGE)}</pre>`;
+  }
+  if (item.evidence.trim().length > 0) {
+    return `<pre class="task-evidence">${escapeHtml(item.evidence)}</pre>`;
+  }
+  return '';
+}
+
+function renderTaskItem(item: ItemModel): string {
+  const glyph = STATE_GLYPH[item.derivedState];
+  return `
+      <div class="task-item task-item-${item.derivedState}">
+        <div class="task-title"><span class="task-glyph">${glyph}</span> ${escapeHtml(formatTaskLine(item))}</div>
+        ${renderTaskEvidence(item)}
+      </div>`;
+}
+
+function renderTaskSection(section: SectionModel): string {
+  const items = section.items.map(renderTaskItem).join('');
+  return `
+    <h2>${escapeHtml(section.heading)}</h2>
+    <div class="task-list">${items}</div>`;
+}
+
+/** The body's Tasks regions: every section buildFeatureModel already
+ * found to hold at least one checklist item, with its items and their
+ * evidence, in the same order the tree view renders them. */
+function renderTaskSections(body: PanelBody): string {
+  return body.taskSections.map(renderTaskSection).join('');
+}
+
+function renderOtherSection(section: PanelBodyDocumentSection): string {
+  return `
+    <h2>${escapeHtml(section.heading)}</h2>
+    <pre class="prose">${escapeHtml(section.body)}</pre>`;
+}
+
+/** The body's remaining regions: the document's other recognized sections
+ * (constraints, scope, acceptance criteria, checks, a decision narrative,
+ * why, delivery, TDD mode, progress notes), each rendered only when the
+ * document has it. Next step is deliberately excluded: the panel header
+ * already shows it (see renderNextStep). */
+function renderOtherSections(body: PanelBody): string {
+  return body.otherSections.map(renderOtherSection).join('');
+}
+
+function renderPanelBody(body: PanelBody): string {
+  return `${renderObjective(body)}${renderTaskSections(body)}${renderOtherSections(body)}`;
+}
+
+/**
  * Renders the panel's full HTML document. Styles only against VS Code's
  * injected `--vscode-*` CSS variables and the `body.vscode-light`,
  * `body.vscode-dark` and `body.vscode-high-contrast` classes VS Code sets
@@ -82,7 +176,7 @@ function renderTiles(header: PanelHeader): string {
  * read-only render with nothing to script, so the CSP has no `script-src`
  * exception at all and `default-src 'none'` blocks scripts outright.
  */
-function renderHtml(header: PanelHeader): string {
+function renderHtml(header: PanelHeader, body: PanelBody): string {
   const nonce = createNonce();
   const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
 
@@ -152,6 +246,43 @@ function renderHtml(header: PanelHeader): string {
   body.vscode-high-contrast .next-step {
     border-width: 2px;
   }
+  h2 {
+    font-size: 1em;
+    margin: 20px 0 8px;
+    color: var(--vscode-foreground);
+  }
+  .prose {
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task-item {
+    border-left: 2px solid var(--vscode-panel-border);
+    padding: 2px 8px;
+  }
+  .task-glyph {
+    display: inline-block;
+    width: 1.2em;
+  }
+  .task-evidence {
+    font-family: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 2px 0 0 1.6em;
+    color: var(--vscode-descriptionForeground);
+  }
+  .task-unproven {
+    color: var(--vscode-editorWarning-foreground);
+  }
+  body.vscode-high-contrast .task-item {
+    border-left-width: 3px;
+  }
 </style>
 </head>
 <body>
@@ -160,9 +291,7 @@ function renderHtml(header: PanelHeader): string {
   ${renderNextStep(header)}
   ${renderTiles(header)}
   <hr>
-  <!-- T11 inserts the body region here: objective, problem, the task list
-       with inline evidence, and the document's optional sections. -->
-  <div id="panel-body"></div>
+  <div id="panel-body">${renderPanelBody(body)}</div>
   <!-- T12 inserts the "Recorded by this document" table here: TDD,
        delivery, route, line budget and review, each its value or "not
        recorded". -->
@@ -200,10 +329,11 @@ export class FeatureDetailPanel implements vscode.Disposable {
    */
   show(model: FeatureModel, workspaceRoot: string, lastWork: string | null = null): void {
     const header = buildPanelHeader(model, workspaceRoot, lastWork);
+    const body = buildPanelBody(model);
 
     if (this.panel) {
-      this.panel.title = header.title;
-      this.panel.webview.html = renderHtml(header);
+      this.panel.title = header.title || VIEW_TITLE_FALLBACK;
+      this.panel.webview.html = renderHtml(header, body);
       this.panel.reveal();
       return;
     }
@@ -212,11 +342,12 @@ export class FeatureDetailPanel implements vscode.Disposable {
       VIEW_TYPE,
       header.title || VIEW_TITLE_FALLBACK,
       vscode.ViewColumn.One,
-      // No scripts: a static header/tiles render has nothing to script,
-      // so enableScripts stays off entirely rather than defaulting it on.
+      // No scripts: a static header/tiles/body render has nothing to
+      // script, so enableScripts stays off entirely rather than
+      // defaulting it on.
       {},
     );
-    this.panel.webview.html = renderHtml(header);
+    this.panel.webview.html = renderHtml(header, body);
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });

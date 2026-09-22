@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPanelHeader } from './build-panel-header';
 import type { FeatureModel } from './build-feature-model';
+import { EMPTY_DOCUMENT_STRUCTURE } from './build-feature-model';
 
 /**
  * buildPanelHeader (T10) composes the detail panel's header and tile row
@@ -23,6 +24,7 @@ function model(overrides: Partial<FeatureModel> = {}): FeatureModel {
     progress: EMPTY_COUNTS,
     sections: [],
     nextStep: null,
+    structure: EMPTY_DOCUMENT_STRUCTURE,
     ...overrides,
   };
 }
