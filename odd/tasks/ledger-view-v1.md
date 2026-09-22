@@ -69,6 +69,12 @@ change to an early slice during review means rebasing the ones stacked above.
 reached it with twelve tasks still open, so treat it as a planning figure that has now been
 overtaken. The delivery budget, not the forecast, is what governs slicing.
 **Running count**: see Progress.
+**Review cadence**: per slice, not per task, chosen by the user on 2026-09-22. Medium-risk
+work unit commits accumulate against the last reviewed boundary and are reviewed together
+when the slice closes. The contract already allows this for medium risk; until now every
+task was reviewed on its own, which cost a consent interruption and a review cycle each.
+High-risk candidates are unaffected and are still reviewed as soon as they appear, because
+the reason a candidate is high risk does not wait for a slice to fill.
 
 ### Slice boundaries
 
@@ -364,70 +370,6 @@ user's decisions under ordinary repository policy.
       authority burned.** Seven advisory findings; one of them describes a real input class
       and is raised as T18 below, the rest are recorded under Progress.
 
-- [ ] T23 The Review row does not take the most recent review
-      Its two loops run in opposite directions: the outer keeps the last matching item
-      across sections while the inner returns the first matching line within an item, so
-      the value is neither consistently the newest nor the oldest. Found by the T12
-      review. Pick one order and make the tests pin it.
-      Route: delegated writer.
-
-- [ ] T24 Two table rows are cut mid-sentence at the document's own line wrap
-      The line-budget row selects a delivery line because a figure appears in it, then
-      truncates that line at a character budget, so a figure sitting past the budget is
-      cut out of the very row that exists to show it. Verified by the parent against this
-      repository's document, where the row reads `roughly 2,800 authored changed lines
-      including tests. It was low: the count` and simply stops. The TDD row stops
-      similarly. **This is the same root cause the T8 review raised against the next-step
-      extractor**: a hard-wrapped sentence is cut at the source's wrap rather than at a
-      sentence boundary. Two independent reports on one input class make it a task.
-      Route: delegated writer.
-
-- [ ] T21 A section holding checklist items renders twice in the panel body
-      The body renders item-bearing sections as task lists and, separately, every
-      recognized optional section as prose. A section that is both — an `Acceptance
-      criteria` heading whose items are checkboxes — appears in both regions. Verified by
-      the parent against this repository's own feature document, which renders
-      `Acceptance criteria` once as a checklist and once as raw text. The fix is a
-      decision about which region wins, not a typo.
-      Route: delegated writer.
-
-- [ ] T22 Three assertions in the panel work do not observe what they name
-      From the T11 review. The no-argument command test samples the webview tab count
-      synchronously around a command whose own file documents that tab state settles
-      asynchronously, so it cannot fail. The workspace-profile test names workspace-root
-      resolution as its subject but asserts only that a tab with the feature name
-      appeared, which the feature name alone produces. And the per-state task glyph and
-      its modifier class are asserted nowhere.
-      **This is the second review in a row to find assertions that cannot fail**, and the
-      first set was itself introduced while closing the same class of finding. That makes
-      it a task rather than a note: the pattern is the defect.
-      Route: delegated writer.
-
-- [ ] T19 Closedness and the `Open` filter disagree about which sections count
-      `isFeatureClosed` reads only `progress`, which sums the sections that count toward
-      it, while the `Open` filter admits items from every section regardless. A feature
-      whose progress-bearing sections are all done therefore renders muted and sorted last
-      while `Open` still shows its outstanding acceptance criteria. One of the two rules
-      has to give; which one is the decision this task carries.
-      Route: delegated writer.
-
-- [ ] T20 The locale test compares a precomposed filename byte-exact
-      It writes a document whose filename carries a precomposed diacritic and compares the
-      discovered feature name with `deepEqual`. A filesystem that normalizes filenames to
-      their decomposed form returns a different byte sequence for the same name, so the
-      test fails there for a reason that has nothing to do with collation. Normalize both
-      sides, or assert on relative order rather than exact strings.
-      Route: delegated writer.
-
-- [ ] T18 A Next step written as a checklist item renders twice
-      The section filter keeps every section holding at least one checklist item, and the
-      next step is additionally emitted as its own node, so a document whose `## Next step`
-      is written as a list item renders it in both places. Raised by the T8 review as an
-      advisory finding; it is a task rather than a note because it describes a document
-      shape the corpus can actually produce, and the fix is a decision about which of the
-      two renderings wins, not a typo.
-      Route: direct inline.
-
 - [x] T9 Tree behaviour: filter and ordering
       `All` / `Open` / `Unproven`; fully-closed features sorted last and muted; reveal the
       Markdown at a task's line on selection.
@@ -595,12 +537,84 @@ user's decisions under ordinary repository policy.
       Extension packaging, README, and the settings reference.
       Route: delegated writer.
 
+### Cleanup pass
+
+Every item below is a defect an approved review raised, or one the parent verified
+against a real document. None of them blocked their review. They were interleaved with
+the feature work until 2026-09-22, which made the remaining list grow faster than it
+shrank; the user moved them here so the feature reaches its shape first and the
+defects close as one pass afterwards. Order within the pass is not fixed.
+
 - [ ] T17 Survive a malformed document
       An unterminated code fence currently swallows the rest of a document in both the
       structure parser and the checklist parser. Raised as an advisory finding by two
       consecutive independent reviews, which is why it is a task rather than a note.
       Also covers an H1 appearing after the first section, currently dropped, and
       `endLine` drifting for a document with no trailing newline.
+      Route: delegated writer.
+
+- [ ] T18 A Next step written as a checklist item renders twice
+      The section filter keeps every section holding at least one checklist item, and the
+      next step is additionally emitted as its own node, so a document whose `## Next step`
+      is written as a list item renders it in both places. Raised by the T8 review as an
+      advisory finding; it is a task rather than a note because it describes a document
+      shape the corpus can actually produce, and the fix is a decision about which of the
+      two renderings wins, not a typo.
+      Route: direct inline.
+
+- [ ] T19 Closedness and the `Open` filter disagree about which sections count
+      `isFeatureClosed` reads only `progress`, which sums the sections that count toward
+      it, while the `Open` filter admits items from every section regardless. A feature
+      whose progress-bearing sections are all done therefore renders muted and sorted last
+      while `Open` still shows its outstanding acceptance criteria. One of the two rules
+      has to give; which one is the decision this task carries.
+      Route: delegated writer.
+
+- [ ] T20 The locale test compares a precomposed filename byte-exact
+      It writes a document whose filename carries a precomposed diacritic and compares the
+      discovered feature name with `deepEqual`. A filesystem that normalizes filenames to
+      their decomposed form returns a different byte sequence for the same name, so the
+      test fails there for a reason that has nothing to do with collation. Normalize both
+      sides, or assert on relative order rather than exact strings.
+      Route: delegated writer.
+
+- [ ] T21 A section holding checklist items renders twice in the panel body
+      The body renders item-bearing sections as task lists and, separately, every
+      recognized optional section as prose. A section that is both — an `Acceptance
+      criteria` heading whose items are checkboxes — appears in both regions. Verified by
+      the parent against this repository's own feature document, which renders
+      `Acceptance criteria` once as a checklist and once as raw text. The fix is a
+      decision about which region wins, not a typo.
+      Route: delegated writer.
+
+- [ ] T22 Three assertions in the panel work do not observe what they name
+      From the T11 review. The no-argument command test samples the webview tab count
+      synchronously around a command whose own file documents that tab state settles
+      asynchronously, so it cannot fail. The workspace-profile test names workspace-root
+      resolution as its subject but asserts only that a tab with the feature name
+      appeared, which the feature name alone produces. And the per-state task glyph and
+      its modifier class are asserted nowhere.
+      **This is the second review in a row to find assertions that cannot fail**, and the
+      first set was itself introduced while closing the same class of finding. That makes
+      it a task rather than a note: the pattern is the defect.
+      Route: delegated writer.
+
+- [ ] T23 The Review row does not take the most recent review
+      Its two loops run in opposite directions: the outer keeps the last matching item
+      across sections while the inner returns the first matching line within an item, so
+      the value is neither consistently the newest nor the oldest. Found by the T12
+      review. Pick one order and make the tests pin it.
+      Route: delegated writer.
+
+- [ ] T24 Two table rows are cut mid-sentence at the document's own line wrap
+      The line-budget row selects a delivery line because a figure appears in it, then
+      truncates that line at a character budget, so a figure sitting past the budget is
+      cut out of the very row that exists to show it. Verified by the parent against this
+      repository's document, where the row reads `roughly 2,800 authored changed lines
+      including tests. It was low: the count` and simply stops. The TDD row stops
+      similarly. **This is the same root cause the T8 review raised against the next-step
+      extractor**: a hard-wrapped sentence is cut at the source's wrap rather than at a
+      sentence boundary. Two independent reports on one input class make it a task.
       Route: delegated writer.
 
 ## Acceptance criteria
@@ -769,5 +783,13 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T13: git-derived history. The reviewed boundary is the commit that records this
-closure, the last one in the Progress table.
+Next is T14: theming and layout, then T15 and T16. The cleanup pass (T17 to T24) follows
+the feature work.
+
+Two decisions the user took on 2026-09-22, after asking whether the pace suited a VS Code
+extension: review per slice rather than per task, and defer every open defect to a cleanup
+pass at the end. The measurement behind them: six tasks closed in about two hours, roughly
+sixty per cent of that in the writers and forty in the review cycle and bookkeeping, with
+the open list growing from 17 items to 24 because each review raised more defects than the
+task closed. The build pace was not the problem; the interleaving and the per-task review
+cadence were.
