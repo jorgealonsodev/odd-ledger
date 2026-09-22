@@ -1,7 +1,7 @@
 # zeta-report-export
 
-Synthetic fixture for adapter-layer tests (T7). Invented content only — no
-real project data.
+Synthetic fixture for adapter-layer tests (T7, extended in T9). Invented
+content only — no real project data.
 
 ## Objective
 
@@ -19,3 +19,5 @@ None recorded.
 
 - [x] Z1 Generate the CSV export on a schedule
       DONE `9f8e7d6`
+
+- [ ] Z2 Add a retry when the export job fails

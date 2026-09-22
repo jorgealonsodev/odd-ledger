@@ -171,3 +171,28 @@ test('orders results deterministically by feature name regardless of creation or
     cleanup(root);
   }
 });
+
+test('orders results the same way whatever locale the host process is configured for', () => {
+  const root = makeWorkspace();
+  try {
+    const tasksDir = join(root, 'odd', 'tasks');
+    mkdirSync(tasksDir, { recursive: true });
+    // 'a' before 'z' before 'ä' is Swedish collation; 'a' before 'ä' before
+    // 'z' is English. A host-resolved comparison returns whichever of the
+    // two the process happens to be configured for, so asserting the
+    // English order here fails on a Swedish host unless the locale is
+    // pinned in the implementation.
+    writeFileSync(join(tasksDir, 'zebra-cache.md'), '# zebra-cache\n');
+    writeFileSync(join(tasksDir, 'anchor-store.md'), '# anchor-store\n');
+    writeFileSync(join(tasksDir, 'ärende-queue.md'), '# arende-queue\n');
+
+    const result = discoverFeatureDocuments(root);
+
+    assert.deepEqual(
+      result.map((doc) => doc.featureName),
+      ['anchor-store', 'ärende-queue', 'zebra-cache'],
+    );
+  } finally {
+    cleanup(root);
+  }
+});

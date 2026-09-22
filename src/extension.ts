@@ -16,10 +16,26 @@ export function activate(context: vscode.ExtensionContext): void {
     provider.refresh();
   });
   context.subscriptions.push(refreshCommand);
+
+  const filterAllCommand = vscode.commands.registerCommand('oddLedger.filterAll', () => {
+    provider.setFilter('all');
+  });
+  context.subscriptions.push(filterAllCommand);
+
+  const filterOpenCommand = vscode.commands.registerCommand('oddLedger.filterOpen', () => {
+    provider.setFilter('open');
+  });
+  context.subscriptions.push(filterOpenCommand);
+
+  const filterUnprovenCommand = vscode.commands.registerCommand('oddLedger.filterUnproven', () => {
+    provider.setFilter('unproven');
+  });
+  context.subscriptions.push(filterUnprovenCommand);
 }
 
 export function deactivate(): void {
-  // Everything activate() created (the tree view, the refresh command) is
-  // a disposable pushed to context.subscriptions, so VS Code tears it down
-  // on its own. Nothing else was allocated, so there is nothing to do here.
+  // Everything activate() created (the tree view, the refresh command and
+  // the three filter commands) is a disposable pushed to
+  // context.subscriptions, so VS Code tears it down on its own. Nothing
+  // else was allocated, so there is nothing to do here.
 }

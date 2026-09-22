@@ -10,13 +10,19 @@ import { FeatureNode, FeatureTreeDataProvider, NextStepNode, SectionNode, TaskNo
  * project content, per this feature's privacy constraint.
  *
  * - alpha-widget-cache: a plain "Branch: ..." metadata line, a Next step
- *   section, and only proven done tasks (all carrying a commit reference).
+ *   section, and only proven done tasks (all carrying a commit reference) —
+ *   every task is done, so this feature is fully closed (T9). Its name
+ *   sorts first alphabetically but last once closed features sort to the
+ *   bottom, which is what makes the tree's ordering externally observable:
+ *   deleting the sort call would leave it in discovery (alphabetical)
+ *   order instead.
  * - beta-notification-hub: a bold "**Branch**: `...`" metadata line, a
  *   Next step section, a done-unproven task, a declined ([~]) task, and
  *   two sections that both carry checklist items (Tasks, Acceptance
- *   criteria).
+ *   criteria). Stays open (not every task is done).
  * - zeta-report-export: no Branch line and no Next step section, so the
- *   tree must state that absence rather than rendering nothing.
+ *   tree must state that absence rather than rendering nothing. Carries
+ *   one done and one open task, so it also stays open.
  */
 suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
   test('the fixture workspace folder is actually open (sanity check for this suite)', () => {
@@ -25,13 +31,17 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
     assert.match(folders![0].uri.fsPath, /sample-workspace$/);
   });
 
-  test('getChildren returns one feature node per discovered document, sorted by name', () => {
+  test('getChildren returns one feature node per discovered document, closed features sorted last (T9)', () => {
+    // Discovery (and this fixture's own alphabetical names) would produce
+    // alpha, beta, zeta. alpha-widget-cache is fully closed, so it must
+    // move to the end: an implementation that dropped the sort, or kept
+    // sorting by name alone, would fail this assertion.
     const provider = new FeatureTreeDataProvider();
     const children = provider.getChildren() as FeatureNode[];
 
     assert.deepEqual(
       children.map((c) => c.model.featureName),
-      ['alpha-widget-cache', 'beta-notification-hub', 'zeta-report-export'],
+      ['beta-notification-hub', 'zeta-report-export', 'alpha-widget-cache'],
     );
   });
 
@@ -41,11 +51,25 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
 
     const alpha = children.find((c) => c.model.featureName === 'alpha-widget-cache');
     assert.ok(alpha);
-    assert.equal(alpha!.description, '2/3 · feat/alpha-widget-cache');
+    assert.equal(alpha!.description, '3/3 · feat/alpha-widget-cache');
 
     const zeta = children.find((c) => c.model.featureName === 'zeta-report-export');
     assert.ok(zeta);
-    assert.equal(zeta!.description, '1/1');
+    assert.equal(zeta!.description, '1/2');
+  });
+
+  test('a fully-closed feature renders muted with the disabledForeground theme colour (T9)', () => {
+    const provider = new FeatureTreeDataProvider();
+    const children = provider.getChildren() as FeatureNode[];
+    const alpha = children.find((c) => c.model.featureName === 'alpha-widget-cache');
+    assert.ok(alpha);
+    const color = (alpha!.iconPath as vscode.ThemeIcon).color;
+    assert.ok(color instanceof vscode.ThemeColor);
+    assert.equal(color!.id, 'disabledForeground');
+
+    const beta = children.find((c) => c.model.featureName === 'beta-notification-hub');
+    assert.ok(beta);
+    assert.equal((beta!.iconPath as vscode.ThemeIcon).color, undefined);
   });
 
   test('a feature with an unproven task shows the unproven badge in its description', () => {
@@ -66,15 +90,14 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
 
   test('a feature with a Next step section shows it as the last child, after every section', () => {
     const provider = new FeatureTreeDataProvider();
-    const [alpha] = provider.getChildren() as FeatureNode[];
+    const alpha = (provider.getChildren() as FeatureNode[]).find(
+      (c) => c.model.featureName === 'alpha-widget-cache',
+    )!;
     const children = provider.getChildren(alpha);
 
     const last = children[children.length - 1];
     assert.ok(last instanceof NextStepNode, 'the last child must be the next-step node');
-    assert.equal(
-      (last as NextStepNode).label,
-      'Next: Add the TTL eviction policy, then re-measure cold-start latency.',
-    );
+    assert.equal((last as NextStepNode).label, 'Next: Watch cache hit-rate metrics in production for a week.');
     // Every node before the last one must be a section, never another
     // next-step node ahead of it.
     for (const child of children.slice(0, -1)) {
@@ -101,7 +124,9 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
 
   test('the feature -> section -> task hierarchy matches the document, with getParent round-tripping every level', () => {
     const provider = new FeatureTreeDataProvider();
-    const [alpha] = provider.getChildren() as FeatureNode[];
+    const alpha = (provider.getChildren() as FeatureNode[]).find(
+      (c) => c.model.featureName === 'alpha-widget-cache',
+    )!;
     const [tasksSection, nextStepNode] = provider.getChildren(alpha);
     assert.ok(tasksSection instanceof SectionNode);
     assert.equal(provider.getParent(tasksSection), alpha);
@@ -125,7 +150,9 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
 
   test('a task node carries the commit reference from its evidence as its description', () => {
     const provider = new FeatureTreeDataProvider();
-    const [alpha] = provider.getChildren() as FeatureNode[];
+    const alpha = (provider.getChildren() as FeatureNode[]).find(
+      (c) => c.model.featureName === 'alpha-widget-cache',
+    )!;
     const [tasksSection] = provider.getChildren(alpha);
     const [t1] = provider.getChildren(tasksSection) as TaskNode[];
     assert.equal(t1.description, '1a2b3c4');
@@ -155,5 +182,65 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
     assert.ok(unproven);
     assert.equal((unproven!.iconPath as vscode.ThemeIcon).id, 'warning');
     assert.equal(unproven!.description, 'checked, no evidence recorded');
+  });
+
+  // --- setFilter (T9) --------------------------------------------------------
+
+  test('setFilter("open") drops the fully-closed feature and narrows the others to their open/declined/unknown items', () => {
+    const provider = new FeatureTreeDataProvider();
+    provider.setFilter('open');
+    const children = provider.getChildren() as FeatureNode[];
+
+    // alpha-widget-cache has no open item at all once every task is done,
+    // so it disappears entirely under this filter rather than rendering an
+    // empty shell.
+    assert.deepEqual(
+      children.map((c) => c.model.featureName),
+      ['beta-notification-hub', 'zeta-report-export'],
+    );
+
+    const beta = children.find((c) => c.model.featureName === 'beta-notification-hub')!;
+    const betaTasks = provider.getChildren(beta).find((c) => c instanceof SectionNode) as SectionNode;
+    const betaTaskIds = (provider.getChildren(betaTasks) as TaskNode[]).map((n) => n.model.id);
+    assert.deepEqual(betaTaskIds, ['B3', 'B4']);
+
+    // Header counts are untouched by the filter: beta is still 2/4, not
+    // recomputed down to the 2 items this filter happens to show.
+    assert.equal(beta.description, '2/4 · 1 unproven · feat/beta-notification-hub');
+
+    const zeta = children.find((c) => c.model.featureName === 'zeta-report-export')!;
+    const zetaTasks = provider.getChildren(zeta)[0] as SectionNode;
+    const zetaTaskIds = (provider.getChildren(zetaTasks) as TaskNode[]).map((n) => n.model.id);
+    assert.deepEqual(zetaTaskIds, ['Z2']);
+  });
+
+  test('setFilter("unproven") keeps only beta-notification-hub, narrowed to its done-unproven items', () => {
+    const provider = new FeatureTreeDataProvider();
+    provider.setFilter('unproven');
+    const children = provider.getChildren() as FeatureNode[];
+
+    // alpha (every task proven by a commit reference) and zeta (its one
+    // done task also carries a commit reference; its other task is still
+    // open, not unproven) both have nothing to show under this filter.
+    assert.deepEqual(
+      children.map((c) => c.model.featureName),
+      ['beta-notification-hub'],
+    );
+
+    const beta = children[0];
+    const betaTasks = provider.getChildren(beta).find((c) => c instanceof SectionNode) as SectionNode;
+    const betaTaskIds = (provider.getChildren(betaTasks) as TaskNode[]).map((n) => n.model.id);
+    assert.deepEqual(betaTaskIds, ['B2']);
+  });
+
+  test('setFilter("all") after a narrower filter restores every feature and every item', () => {
+    const provider = new FeatureTreeDataProvider();
+    provider.setFilter('unproven');
+    provider.setFilter('all');
+    const children = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      children.map((c) => c.model.featureName),
+      ['beta-notification-hub', 'zeta-report-export', 'alpha-widget-cache'],
+    );
   });
 });

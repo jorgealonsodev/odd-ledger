@@ -46,12 +46,45 @@
         "title": "Refresh",
         "category": "ODD Ledger",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "oddLedger.filterAll",
+        "title": "Show All",
+        "category": "ODD Ledger",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "oddLedger.filterOpen",
+        "title": "Show Open",
+        "category": "ODD Ledger",
+        "icon": "$(circle-large-outline)"
+      },
+      {
+        "command": "oddLedger.filterUnproven",
+        "title": "Show Unproven",
+        "category": "ODD Ledger",
+        "icon": "$(warning)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "oddLedger.refresh",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterAll",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterOpen",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.filterUnproven",
           "when": "view == oddLedger.features",
           "group": "navigation"
         }

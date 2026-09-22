@@ -32,6 +32,14 @@ export interface DiscoveredFeatureDocument {
  * Results are ordered alphabetically by feature name. Directory read order
  * is filesystem- and OS-dependent and not guaranteed stable across calls, so
  * sorting is what keeps a tree view from reshuffling between refreshes.
+ *
+ * The collation is pinned to `'en'` rather than left to the host. Called
+ * with no locale, `localeCompare` resolves collation from the process's ICU
+ * build and its `LANG`/`LC_ALL` environment, which orders the same two names
+ * differently on two machines. This order is also what breaks ties later:
+ * the tree re-sorts features with a comparison that treats names differing
+ * only by case or accent as equal, and a stable sort then preserves whatever
+ * order arrived from here.
  */
 export function discoverFeatureDocuments(workspaceRoot: string): DiscoveredFeatureDocument[] {
   const tasksDir = join(workspaceRoot, 'odd', 'tasks');
@@ -58,6 +66,6 @@ export function discoverFeatureDocuments(workspaceRoot: string): DiscoveredFeatu
     documents.push({ path, featureName });
   }
 
-  documents.sort((a, b) => a.featureName.localeCompare(b.featureName));
+  documents.sort((a, b) => a.featureName.localeCompare(b.featureName, 'en'));
   return documents;
 }

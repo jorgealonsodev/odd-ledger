@@ -19,6 +19,8 @@ import { buildFeatureModel } from '../domain/build-feature-model';
 import type { ChecklistCounts, DerivedItemState } from '../domain/derive-checklist-state';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
+import { compareFeatures, filterFeature, isFeatureClosed } from '../domain/filter-and-order-features';
+import type { LedgerFilter } from '../domain/filter-and-order-features';
 
 /** Counts reported when a document cannot be read or parsed: the same
  * "nothing found" shape production code already understands, rather than
@@ -88,7 +90,12 @@ export class FeatureNode extends vscode.TreeItem {
     super(model.featureName, vscode.TreeItemCollapsibleState.Expanded);
     this.description = formatFeatureDescription(model);
     this.tooltip = formatFeatureTooltip(model);
-    this.iconPath = new vscode.ThemeIcon('checklist');
+    // A feature whose tasks are all closed renders muted (PRD: "as close to
+    // archived as ODD gets, and it is derived, not stored") via the theme's
+    // own disabled-foreground colour, never a hardcoded one.
+    this.iconPath = isFeatureClosed(model)
+      ? new vscode.ThemeIcon('checklist', new vscode.ThemeColor('disabledForeground'))
+      : new vscode.ThemeIcon('checklist');
     this.contextValue = 'oddLedger.feature';
   }
 }
@@ -171,6 +178,15 @@ export class TaskNode extends vscode.TreeItem {
     this.description = formatTaskDescription(model);
     this.tooltip = formatTaskTooltip(model);
     this.contextValue = 'oddLedger.task';
+    // Clicking a task reveals it in the Markdown at its line (PRD). The
+    // model's line numbers are 1-based (as written in the document); the
+    // Range/Position API is 0-based, so the conversion happens once, here.
+    const line = model.startLine - 1;
+    this.command = {
+      command: 'vscode.open',
+      title: 'Open',
+      arguments: [vscode.Uri.file(documentPath), { selection: new vscode.Range(line, 0, line, 0) }],
+    };
   }
 }
 
@@ -200,10 +216,11 @@ export class NextStepNode extends vscode.TreeItem {
  * Multi-root decision: a feature is not scoped to "its" folder in this
  * view. Every open workspace folder is scanned with the same domain-layer
  * discovery function, and every feature document found in any of them
- * becomes a root node in one flat, alphabetically sorted list — there is
- * no per-folder grouping level, because nothing in the interface calls for
- * one and a typical project has one or two features total, not per
- * folder.
+ * becomes a root node in one flat list — there is no per-folder grouping
+ * level, because nothing in the interface calls for one and a typical
+ * project has one or two features total, not per folder. The list is
+ * ordered by compareFeatures: open features first, closed ones last, by
+ * name within each group.
  *
  * No-workspace decision: a window with no workspace folder at all
  * (`vscode.workspace.workspaceFolders` is `undefined`) produces the same
@@ -219,8 +236,20 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
 
   readonly onDidChangeTreeData = this.changeEmitter.event;
 
+  /** The active filter (PRD: `All` / `Open` / `Unproven`). `all` by
+   * default, so an unfiltered tree is what a fresh view shows. */
+  private filter: LedgerFilter = 'all';
+
   /** Re-renders the tree. Bound to the refresh command in extension.ts. */
   refresh(): void {
+    this.changeEmitter.fire();
+  }
+
+  /** Changes the active filter and re-renders. Bound to the three filter
+   * commands (`oddLedger.filterAll` / `filterOpen` / `filterUnproven`) in
+   * extension.ts. */
+  setFilter(filter: LedgerFilter): void {
+    this.filter = filter;
     this.changeEmitter.fire();
   }
 
@@ -259,16 +288,23 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
 
   private discoverFeatures(): FeatureNode[] {
     const folders = vscode.workspace.workspaceFolders ?? [];
-    const items: FeatureNode[] = [];
+    const models: FeatureModel[] = [];
 
     for (const folder of folders) {
       for (const document of discoverFeatureDocuments(folder.uri.fsPath)) {
-        items.push(new FeatureNode(this.readModel(document)));
+        const model = this.readModel(document);
+        const filtered = filterFeature(model, this.filter);
+        // A feature with nothing left under the active filter (e.g. no
+        // done-unproven items under "Unproven") is not shown at all,
+        // rather than rendering an empty shell.
+        if (filtered) {
+          models.push(filtered);
+        }
       }
     }
 
-    items.sort((a, b) => a.model.featureName.localeCompare(b.model.featureName));
-    return items;
+    models.sort(compareFeatures);
+    return models.map((model) => new FeatureNode(model));
   }
 
   /**

@@ -225,6 +225,60 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(node.tooltip, 'declined');
   });
 
+  // --- closed-feature muting (T9) -----------------------------------------
+
+  test('an open feature node uses the plain checklist icon with no theme colour override', () => {
+    const node = new FeatureNode(feature({ progress: { done: 1, total: 2, percentage: 50, doneUnproven: 0 } }));
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'checklist');
+    assert.equal((node.iconPath as vscode.ThemeIcon).color, undefined);
+  });
+
+  test('a fully-closed feature node renders muted via the disabledForeground theme colour', () => {
+    const node = new FeatureNode(feature({ progress: { done: 2, total: 2, percentage: 100, doneUnproven: 0 } }));
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'checklist');
+    const color = (node.iconPath as vscode.ThemeIcon).color;
+    assert.ok(color instanceof vscode.ThemeColor);
+    assert.equal(color!.id, 'disabledForeground');
+  });
+
+  // --- filter (T9) ---------------------------------------------------------
+
+  test('the provider defaults to the "all" filter and setFilter fires the change event', () => {
+    const provider = new FeatureTreeDataProvider();
+    let fired = false;
+    provider.onDidChangeTreeData(() => {
+      fired = true;
+    });
+    provider.setFilter('open');
+    assert.equal(fired, true);
+  });
+
+  // --- reveal-on-click (T9) -------------------------------------------------
+
+  test("a task node's command opens the document and reveals its line, converted from 1-based to 0-based", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ derivedState: 'open', startLine: 42 }), parent, '/x/f.md');
+
+    assert.ok(node.command);
+    assert.equal(node.command!.command, 'vscode.open');
+    const [uri, options] = node.command!.arguments as [vscode.Uri, { selection: vscode.Range }];
+    assert.equal(uri.fsPath, '/x/f.md');
+    assert.ok(options.selection instanceof vscode.Range);
+    // startLine is 1-based (line 42 in the document); the reveal API is
+    // 0-based, so the selection must land on line 41.
+    assert.equal(options.selection.start.line, 41);
+    assert.equal(options.selection.end.line, 41);
+  });
+
+  test("a task node's command line conversion holds at the first line of a document (startLine 1 -> line 0)", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ derivedState: 'open', startLine: 1 }), parent, '/x/f.md');
+    const [, options] = node.command!.arguments as [vscode.Uri, { selection: vscode.Range }];
+    assert.equal(options.selection.start.line, 0);
+  });
+
   // --- NextStepNode ------------------------------------------------------
 
   test('a next-step node labels itself "Next: <line>", is a leaf, and carries the full line as tooltip', () => {

@@ -1,6 +1,6 @@
 # alpha-widget-cache
 
-Synthetic fixture for adapter-layer tests (T7, extended in T8). Invented
+Synthetic fixture for adapter-layer tests (T7, extended in T8, T9). Invented
 content only — no real project data.
 
 Branch: feat/alpha-widget-cache
@@ -25,8 +25,9 @@ None recorded.
 - [x] T2 Add a cache-hit metric
       DONE `5d6e7f8`
 
-- [ ] T3 Add a TTL eviction policy
+- [x] T3 Add a TTL eviction policy
+      DONE `7a8b9c0`
 
 ## Next step
 
-Add the TTL eviction policy, then re-measure cold-start latency.
+Watch cache hit-rate metrics in production for a week.
