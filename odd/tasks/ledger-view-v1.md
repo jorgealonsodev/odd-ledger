@@ -516,11 +516,72 @@ user's decisions under ordinary repository policy.
       **Approved with zero blocking findings, acknowledged, authority burned.** Six
       advisory findings; two are real defects and are raised as T23 and T24.
 
-- [ ] T13 Git-derived history
+- [x] T13 Git-derived history
       `git log --follow` over the document; completion ratio recomputed per revision; a
       sentence with revision count and date range by default, a chart only above a
       threshold; per-commit granularity stated in the caption.
-      Route: delegated writer.
+      Route: delegated writer, then three delegated corrections and one delegated
+      simplification. Trigger evidence: 11 source files across both layers.
+      DONE `74fc996`, corrected by `1636231`, `f73dc9b` and `e8a40c9`, simplified by
+      `fd805cf`.
+      The region reads the document's revisions, recomputes each one's completion ratio by
+      parsing that revision's own text, and states a sentence with the revision count and
+      date range. A chart appears only past a threshold, because the survey found one real
+      document with ten revisions, one with two and three with a single one, so most
+      documents cannot be plotted at all. Its caption says each point is one commit on an
+      axis of revision time, not working time. The `LAST WORK` tile, left stating its own
+      absence in T10, now carries the most recent revision date.
+      **Git runs without a shell.** The arguments are an array, never a concatenated
+      command line; the repository is named by git's own `-C`; the document path comes
+      after a separator so a name beginning with a dash cannot be read as a flag; the git
+      location variables are removed from the child environment so that argument is what
+      decides which repository is read; and the configuration keys that let a repository
+      ask git to run a command of its choosing are disabled for these calls. Any failure,
+      including git being absent, is reported as history being unavailable rather than
+      thrown.
+      **This was the feature's first high-risk candidate**, because it is its first
+      external process execution, so it drew four lenses instead of one. What followed is
+      worth recording in full, because the shape of it is the lesson.
+      The first review found the read running synchronously on the extension host thread,
+      one process per revision, from a click. The five second limit bounded each call and
+      not the operation, so a long history could freeze the editor for minutes. The
+      correction made it asynchronous and closed five narrower holes with it: an unbounded
+      fan-out, a non-ASCII filename silently losing all of its history to git's path
+      quoting, ambient environment variables overriding the repository argument, a
+      silently dropped revision letting the panel state a confident stale date, and the
+      repository-chosen configuration keys above.
+      **The second review found two criticals that the first correction had introduced.**
+      The panel now rendered nothing until git resolved, so a freeze had become a blank
+      wait, and making the handler asynchronous opened a race on the single shared panel
+      where two quick selections could pair one feature's header with another's history.
+      **The third review found two more, again introduced by the second correction.** A
+      panel closed during the read reopened itself, and a read where every revision failed
+      was reported as no history at all, erasing the distinction the correction before it
+      had just added. What remained after that was the deferred render stealing focus when
+      the user had merely moved to another editor.
+      **At that point the mechanism was deleted rather than patched a fourth time.** The
+      two phases existed to avoid a blank wait, and that wait had been unbounded when they
+      were designed. The first correction capped the read at fifty revisions, and the
+      parent measured what remained: 115 milliseconds for eighteen revisions, roughly 320
+      in the worst case, which is ordinary for opening a detail view. The premise had
+      expired, so the mechanism was pure cost. Deleting it removed the race, the
+      resurrection and the focus theft together, along with the pending state, the request
+      token, its guard and the liveness predicate that existed only to serve it.
+      Converting a blocking call to an asynchronous one trades a blocking problem for
+      problems of ordering, and then of lifetime; a shared, revealable, disposable surface
+      has more states than the synchronous version ever had.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 207 tests, 206 pass,
+      1 skipped; `npm run test:extension` 62 passing in the no-folder profile and 17 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean, and no synchronous or shell process execution remains in
+      production code. The parent proved the freeze was gone rather than asserting it: the
+      event loop ticked 52 times during a 58 millisecond read, where a synchronous call
+      would have ticked none.
+      **Review: declined by the user on this candidate**, after three rounds had already
+      run and the mechanism they kept finding fault with had been removed. The three
+      completed reviews are what produced every correction above; the simplified result
+      itself carries no receipt, and this document does not claim one. Delivery follows
+      ordinary repository policy.
 
 - [ ] T14 Theming and layout
       Theme tokens throughout and codicons. The webview styles against the CSS variables VS
@@ -644,7 +705,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 12 of 24 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 13 of 24 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -675,6 +736,15 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 12 of 24 tasks c
 | `934a288` | T10 detail panel header and tiles |
 | `64c3bab` | T10 review approved, recorded as closed |
 | `84b5ddf` | T11 panel body, and five T10 findings closed |
+| `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
+| `280811b` | T12 recorded-by-this-document table |
+| `01dbe1f` | T12 review approved, recorded as closed; T23 and T24 raised |
+| `74fc996` | T13 git-derived history |
+| `f59a84a` | Review cadence per slice; defects moved to a cleanup pass |
+| `1636231` | T13 first correction: the read no longer blocks the editor |
+| `f73dc9b` | T13 second correction: the panel shows first, newest click wins |
+| `e8a40c9` | T13 third correction: a closed panel stays closed |
+| `fd805cf` | T13 simplified: the deferred second render deleted |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
 
@@ -785,6 +855,11 @@ the T7 review was granted, approved and acknowledged on 2026-09-22.
 
 Next is T14: theming and layout, then T15 and T16. The cleanup pass (T17 to T24) follows
 the feature work.
+
+T15 is worth pulling forward if the tree is being used while this is built. The extension
+has no file watcher yet, so an open view keeps showing whatever it read last; the user hit
+exactly that on 2026-09-22, reading a count of eight while the document already recorded
+twelve. The manual refresh action covers it until T15 lands.
 
 Two decisions the user took on 2026-09-22, after asking whether the pace suited a VS Code
 extension: review per slice rather than per task, and defer every open defect to a cleanup
