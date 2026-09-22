@@ -821,6 +821,7 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 15 of 24 tasks c
 | `c490f35` | T15 watch the documents and refresh on change |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
+| `5b7e2be` | T14/T15 slice review correction: the watcher-driven refresh gets a real failure path |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -926,6 +927,14 @@ font reachable and prove it from the built package rather than from the working 
 in `9319d6d` was precisely a Node-version-dependent behaviour, so a single pinned version
 cannot catch that class of regression. A version matrix is worth considering before v1
 ships.
+
+**The T14/T15 slice review (lineage `review-5fdd501c4d53856e`, `review-reliability` lens)
+is approved and acknowledged.** It found the watcher-driven refresh had no failure path at
+all: a document that vanished or turned unreadable between the existence check and the
+read, or a git-history fetch that rejected, was swallowed by a discarded promise while the
+panel kept showing content that was no longer true. A refresh feature that fails silently
+that way puts the view back to lying about being current — exactly the problem T15 exists
+to remove. Corrected in `5b7e2be`.
 
 ## Next step
 
