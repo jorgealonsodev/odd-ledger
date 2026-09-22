@@ -5,13 +5,15 @@
  * command performing two actions, because a VS Code TreeItem carries only
  * one.
  *
- * Layout is deliberate: the document opens in the main editor column
- * (`vscode.ViewColumn.One`) as a preview (so walking many tasks does not
- * leave a trail of pinned tabs) without stealing focus from the tree
+ * Layout is deliberate: the document opens in the same fixed column the
+ * detail panel lives in (`vscode.ViewColumn.One`, see FeatureDetailPanel's
+ * PANEL_VIEW_COLUMN) as a preview (so walking many tasks does not leave a
+ * trail of pinned tabs) without stealing focus from the tree
  * (`preserveFocus: true`, so arrowing through the task list keeps working
- * without a trip back to the tree with the mouse). The detail panel keeps
- * opening beside it (see FeatureDetailPanel.show`) rather than competing
- * for the same column.
+ * without a trip back to the tree with the mouse). Document and panel land
+ * as two separate tabs in that one group; the extension never opens or
+ * creates a second column for either of them, and the user is free to
+ * switch tabs or split the editor themselves.
  *
  * This feature's history is three rounds of critical findings in exactly
  * this area — a blocking git read that froze the editor, then an

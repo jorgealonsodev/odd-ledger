@@ -8,6 +8,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
 const { listFiles } = require('@vscode/vsce');
 
@@ -18,6 +19,24 @@ const ROOT = path.resolve(__dirname, '..');
 // @vscode/codicons is loaded.
 const CODICON_FONT = 'node_modules/@vscode/codicons/dist/codicon.ttf';
 const BUNDLED_ENTRY_POINT = 'dist/extension.js';
+
+// markdown-it ships a different way than the codicon font: it is imported
+// TypeScript (src/domain/render-markdown.ts) that esbuild statically
+// bundles straight into BUNDLED_ENTRY_POINT, not a binary asset read from
+// disk at runtime by path. So it needs no node_modules carve-out of its
+// own — node_modules/** stays ignored wholesale for it — but the bundle
+// itself has to actually contain its code, not just its type
+// declarations, or the panel's Markdown rendering silently breaks at
+// runtime the moment a document has any evidence to render.
+//
+// Every one of these is a literal string argument markdown-it's own
+// source passes to its rule registries (`ruler.push('backticks', ...)`
+// and similar) so its Ruler can look rules up by name at runtime — esbuild
+// minifies identifiers, never the contents of a string literal a running
+// program still reads by value, so these survive a production build
+// unchanged and are direct evidence the library's own code, not just its
+// name in package.json, made it into the shipped bundle.
+const MARKDOWN_IT_RULE_NAME_LITERALS = ['backticks', 'linkify', 'strikethrough', 'html_block'];
 
 let cachedFiles;
 
@@ -98,4 +117,31 @@ test('carries no other package of @vscode/codicons than its font', async () => {
   const files = await packagedFiles();
   const codiconFiles = files.filter((file) => file.startsWith('node_modules/@vscode/codicons/'));
   assert.deepEqual(codiconFiles, [CODICON_FONT]);
+});
+
+test('declares markdown-it as a runtime dependency, not a dev dependency', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+  assert.ok(pkg.dependencies && pkg.dependencies['markdown-it'], 'expected "markdown-it" under package.json dependencies');
+  assert.ok(
+    !pkg.devDependencies || !pkg.devDependencies['markdown-it'],
+    'expected "markdown-it" not to also be a devDependency',
+  );
+});
+
+test('bundles markdown-it\'s own code into the shipped entry point, not just its dependency declaration', async () => {
+  const files = await packagedFiles();
+  assert.ok(files.includes(BUNDLED_ENTRY_POINT), `expected ${BUNDLED_ENTRY_POINT} in the package`);
+  const bundleSource = fs.readFileSync(path.join(ROOT, BUNDLED_ENTRY_POINT), 'utf-8');
+  for (const ruleName of MARKDOWN_IT_RULE_NAME_LITERALS) {
+    assert.ok(
+      bundleSource.includes(`'${ruleName}'`) || bundleSource.includes(`"${ruleName}"`),
+      `expected the markdown-it rule name literal "${ruleName}" inside ${BUNDLED_ENTRY_POINT}; the library may have been externalized instead of bundled`,
+    );
+  }
+});
+
+test('carries no raw markdown-it package under node_modules: it ships bundled into the entry point, not as its own files', async () => {
+  const files = await packagedFiles();
+  const markdownItFiles = files.filter((file) => file.startsWith('node_modules/markdown-it/'));
+  assert.deepEqual(markdownItFiles, []);
 });

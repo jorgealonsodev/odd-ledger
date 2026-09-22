@@ -109,6 +109,7 @@
     "vscode:prepublish": "npm run check-types && npm run bundle -- --production"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^26.6.2",
     "@types/vscode": "^1.85.0",
@@ -119,6 +120,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@vscode/codicons": "^0.0.46-24"
+    "@vscode/codicons": "^0.0.46-24",
+    "markdown-it": "^15.0.2"
   }
 }

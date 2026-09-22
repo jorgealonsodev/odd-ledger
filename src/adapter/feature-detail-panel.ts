@@ -33,9 +33,36 @@ import type { DerivedItemState } from '../domain/derive-checklist-state';
 import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
 import { STATE_COLOR_TOKEN, themeColorCssVar } from '../domain/state-colors';
+import { prepareEvidenceMarkdown } from '../domain/prepare-evidence-markdown';
+import { renderMarkdown } from '../domain/render-markdown';
+
+/** Prepares and renders a document-authored Markdown string (evidence, or
+ * an Objective/Problem/other-section body) for embedding directly in the
+ * page — dedented and rejoined first (prepareEvidenceMarkdown), then
+ * rendered through render-markdown.ts's hardened renderer. The result is
+ * already-safe HTML, meant to be interpolated as-is, never passed through
+ * escapeHtml again. */
+function renderProseMarkdown(text: string): string {
+  return renderMarkdown(prepareEvidenceMarkdown(text));
+}
 
 const VIEW_TYPE = 'oddLedger.featureDetail';
 const VIEW_TITLE_FALLBACK = 'ODD Ledger';
+
+/** The panel's one fixed home: the leftmost editor column, attached to the
+ * sidebar the tree lives in, as a tab beside whatever else is already open
+ * there. `vscode.ViewColumn.Beside` was tried first and rejected: it means
+ * "the column after whichever one is active right now", so the panel's
+ * landing column depended on what the user happened to have focused at
+ * click time — the tree, an editor in column one, an editor in column two
+ * — and could even manufacture a third column in a layout that already had
+ * two. A literal column has no such dependency: every show() call lands
+ * here, regardless of what was active, and this class never opens or
+ * creates any other column. The document a task click opens shares this
+ * same column (see open-task.ts) — both end up as tabs the user switches
+ * between or splits themselves, rather than the extension choosing a split
+ * for them. */
+const PANEL_VIEW_COLUMN = vscode.ViewColumn.One;
 
 /** A fresh per-render nonce for the Content-Security-Policy's `style-src`,
  * so the CSP can stay `default-src 'none'` plus one nonce-scoped exception
@@ -87,12 +114,11 @@ function renderTiles(header: PanelHeader): string {
 
 /**
  * The body's Objective region: the document's Objective and Problem
- * sections' prose (already joined by buildPanelBody). Markdown is not
- * rendered to HTML here — a Markdown renderer is a dependency this
- * extension does not carry, and a partial hand-rolled one would misrender
- * the real corpus in ways worse than showing it as plain text — so the
- * text is escaped and kept in a `<pre>` to preserve the document's own
- * line breaks and whitespace.
+ * sections' prose (already joined by buildPanelBody), rendered as
+ * Markdown (see renderProseMarkdown) rather than kept as escaped plain
+ * text — the document's own headings, lists, code spans and emphasis now
+ * render as the elements they name, instead of surviving as literal
+ * source punctuation.
  */
 function renderObjective(body: PanelBody): string {
   if (body.objective === null) {
@@ -100,7 +126,7 @@ function renderObjective(body: PanelBody): string {
   }
   return `
     <h2>Objective</h2>
-    <pre class="prose">${escapeHtml(body.objective)}</pre>`;
+    <div class="prose">${renderProseMarkdown(body.objective)}</div>`;
 }
 
 /** Maps a derived task state to the codicon glyph name the tree view
@@ -160,15 +186,18 @@ function formatTaskLine(item: ItemModel): string {
  * A task's evidence line: the ODD unproven statement for a done-unproven
  * item (the item itself, by construction, records no evidence and no
  * commit reference — see deriveChecklistState), the item's own evidence
- * text when it recorded any, or nothing at all otherwise. Never Markdown-
- * rendered, for the same reason renderObjective is not.
+ * text when it recorded any, or nothing at all otherwise. The unproven
+ * message is this extension's own static text, not document content, so
+ * it stays escaped plain text; the item's own evidence is document
+ * content and is rendered as Markdown (see renderProseMarkdown), the same
+ * way the tree's own tooltip already renders it.
  */
 function renderTaskEvidence(item: ItemModel): string {
   if (item.derivedState === 'done-unproven') {
     return `<pre class="task-evidence task-unproven">${escapeHtml(UNPROVEN_TASK_MESSAGE)}</pre>`;
   }
   if (item.evidence.trim().length > 0) {
-    return `<pre class="task-evidence">${escapeHtml(item.evidence)}</pre>`;
+    return `<div class="task-evidence">${renderProseMarkdown(item.evidence)}</div>`;
   }
   return '';
 }
@@ -238,7 +267,7 @@ function renderFocusedTaskRegion(focusedTask: ItemModel | null): string {
 function renderOtherSection(section: PanelBodyDocumentSection): string {
   return `
     <h2>${escapeHtml(section.heading)}</h2>
-    <pre class="prose">${escapeHtml(section.body)}</pre>`;
+    <div class="prose">${renderProseMarkdown(section.body)}</div>`;
 }
 
 /** The body's remaining regions: the document's other recognized sections
@@ -588,7 +617,6 @@ function renderHtml(
   }
   .prose {
     font-family: inherit;
-    white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
   }
@@ -611,16 +639,86 @@ function renderHtml(
   }
   .task-evidence {
     font-family: inherit;
-    white-space: pre-wrap;
     word-break: break-word;
     margin: 2px 0 0 1.6em;
     color: var(--vscode-descriptionForeground);
   }
   .task-unproven {
+    white-space: pre-wrap;
     color: var(--vscode-editorWarning-foreground);
   }
   body.vscode-high-contrast .task-item {
     border-left-width: 3px;
+  }
+  /* Markdown-rendered elements inside .prose (Objective/Problem and the
+     other document sections) and .task-evidence (a checklist item's own
+     evidence, rendered the same way the tree's tooltip already renders
+     it). Shared between the two so an evidence line and a prose section
+     never read as two different typographic systems. */
+  .prose > :first-child, .task-evidence > :first-child {
+    margin-top: 0;
+  }
+  .prose > :last-child, .task-evidence > :last-child {
+    margin-bottom: 0;
+  }
+  .prose p, .task-evidence p {
+    margin: 0 0 8px;
+  }
+  .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6,
+  .task-evidence h1, .task-evidence h2, .task-evidence h3, .task-evidence h4, .task-evidence h5, .task-evidence h6 {
+    font-size: 1em;
+    font-weight: bold;
+    margin: 10px 0 4px;
+    color: var(--vscode-foreground);
+  }
+  .prose strong, .task-evidence strong {
+    font-weight: bold;
+  }
+  .prose em, .task-evidence em {
+    font-style: italic;
+  }
+  .prose code, .task-evidence code {
+    font-family: var(--vscode-editor-font-family);
+    background-color: var(--vscode-textCodeBlock-background);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  .prose pre, .task-evidence pre {
+    font-family: var(--vscode-editor-font-family);
+    background-color: var(--vscode-textCodeBlock-background);
+    padding: 8px 10px;
+    border-radius: 3px;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 0 0 8px;
+  }
+  .prose pre code, .task-evidence pre code {
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+  }
+  .prose ul, .prose ol, .task-evidence ul, .task-evidence ol {
+    margin: 0 0 8px;
+    padding-left: 1.4em;
+  }
+  .prose li, .task-evidence li {
+    margin: 2px 0;
+  }
+  .prose blockquote, .task-evidence blockquote {
+    border-left: 3px solid var(--vscode-panel-border);
+    background-color: var(--vscode-textBlockQuote-background);
+    margin: 0 0 8px;
+    padding: 4px 10px;
+    color: var(--vscode-descriptionForeground);
+  }
+  .prose a, .task-evidence a {
+    color: var(--vscode-textLink-foreground);
+  }
+  body.vscode-high-contrast .prose blockquote,
+  body.vscode-high-contrast .task-evidence blockquote,
+  body.vscode-high-contrast .prose pre,
+  body.vscode-high-contrast .task-evidence pre {
+    border: 1px solid var(--vscode-panel-border);
   }
   .recorded-table {
     width: 100%;
@@ -769,19 +867,25 @@ export class FeatureDetailPanel implements vscode.Disposable {
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
       this.panel.webview.html = renderHtml(header, body, recordedFields, history, this.panel.webview, this.extensionUri);
-      this.panel.reveal(undefined, preserveFocus);
+      // PANEL_VIEW_COLUMN, not undefined: the panel is already at its one
+      // fixed home, so this is a no-op today, but naming the column here
+      // makes that guarantee explicit instead of resting on reveal()'s
+      // "stay put" default — a future change to this method can't silently
+      // start moving the panel just by passing a column through.
+      this.panel.reveal(PANEL_VIEW_COLUMN, preserveFocus);
       return;
     }
 
     this.panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
       header.title || VIEW_TITLE_FALLBACK,
-      // Beside, not One: a task click (oddLedger.openTask) also opens its
-      // document in the main editor column (ViewColumn.One), and both
-      // competing for that same column would rearrange the editor on
-      // every click. Kept the same for a feature click too, so the panel
-      // never has two different column strategies to reason about.
-      { viewColumn: vscode.ViewColumn.Beside, preserveFocus },
+      // PANEL_VIEW_COLUMN: a task click (oddLedger.openTask) also opens its
+      // document in the same column (ViewColumn.One), so both land as
+      // separate tabs in the same group instead of the extension carving
+      // out a second column for either of them. Kept the same for a
+      // feature click too, so the panel never has two different column
+      // strategies to reason about.
+      { viewColumn: PANEL_VIEW_COLUMN, preserveFocus },
       {
         // No scripts: a static header/tiles/body render has nothing to
         // script, so enableScripts stays off entirely rather than

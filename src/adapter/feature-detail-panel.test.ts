@@ -288,7 +288,7 @@ suite('FeatureDetailPanel', () => {
 
   // --- body: objective, tasks, other sections (T11) -----------------------
 
-  test('renders the objective region from the Objective and Problem sections\' prose, as escaped preformatted text, not Markdown', () => {
+  test('renders the objective region from the Objective and Problem sections\' prose, as rendered Markdown', () => {
     const text = [
       '# sample',
       '',
@@ -309,12 +309,12 @@ suite('FeatureDetailPanel', () => {
 
     const html = panel.webviewPanel?.webview.html ?? '';
     assert.match(html, /<h2>Objective<\/h2>/);
-    assert.ok(html.includes('Ship the **cache** warmer.'));
-    assert.ok(html.includes('Reconciled *by hand* today.'));
-    // Markdown is not rendered to HTML: the literal asterisks survive and
-    // no <strong> or <em> tag is produced from them.
-    assert.ok(!html.includes('<strong>'));
-    assert.ok(!html.includes('<em>'));
+    // Rendered as real elements, not surviving as literal source
+    // punctuation: no bare "**"/"*" run reaches the page.
+    assert.match(html, /<strong>cache<\/strong>/);
+    assert.match(html, /<em>by hand<\/em>/);
+    assert.ok(!html.includes('**cache**'));
+    assert.ok(!html.includes('*by hand*'));
   });
 
   test('renders no objective region when the document has neither Objective nor Problem', () => {
@@ -343,9 +343,74 @@ suite('FeatureDetailPanel', () => {
     assert.match(html, /<h2>Tasks<\/h2>/);
     assert.ok(html.includes('T1'));
     assert.ok(html.includes('Ship it'));
-    assert.ok(html.includes('DONE `4b7c1e9`'));
+    // The evidence line's own inline code span renders as a real <code>
+    // element, not literal backticks around the hash.
+    assert.match(html, /<code>4b7c1e9<\/code>/);
+    assert.ok(!html.includes('`4b7c1e9`'));
     assert.ok(html.includes('T2'));
     assert.ok(html.includes('Not started yet'));
+  });
+
+  test('evidence with the checklist-continuation indent renders as prose, not an indented code block', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 Ship it',
+      '      First paragraph.',
+      '',
+      '      Second paragraph with `T1` and **bold**.',
+    ].join('\n');
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    // The evidence's first line loses its six-space indent to the trim
+    // parse-checklist.ts already applies to the whole block, but a second
+    // paragraph after a blank line does not: unstripped, that second
+    // paragraph's own six-space indent is, to Markdown, an indented code
+    // block — the whole line would land inside <pre><code> as literal
+    // text, and neither the bold run nor the inline code span inside it
+    // would render as its own element. Both rendering here as real
+    // elements is exactly what proves the dedent (prepareEvidenceMarkdown)
+    // actually ran before renderMarkdown did.
+    assert.match(html, /<strong>bold<\/strong>/);
+    assert.match(html, /<code>T1<\/code>/);
+    assert.ok(!/<div class="task-evidence">[\s\S]*?<pre>/.test(html), 'expected the evidence to render as prose, not a code block');
+  });
+
+  test('raw HTML inside evidence is escaped end to end through the panel, never emitted', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 Ship it',
+      '      <script>alert(1)</script> is not real evidence.',
+    ].join('\n');
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.ok(!html.includes('<script>alert(1)</script>'), 'expected the raw <script> tag to never reach the page');
+    assert.match(html, /&lt;script&gt;/);
+  });
+
+  test('a javascript: link inside evidence never becomes a clickable href, end to end through the panel', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 Ship it',
+      '      See [details](javascript:alert(1)) for context.',
+    ].join('\n');
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.ok(!/href\s*=\s*"javascript:/i.test(html), 'expected no javascript: href to reach the page');
   });
 
   test('a done-unproven task states the ODD unproven message inline, not a generic label', () => {
@@ -456,7 +521,7 @@ suite('FeatureDetailPanel', () => {
     assert.ok(region.includes('4b7c1e9'), 'expected the focused region to show the commit reference');
   });
 
-  test('renders the document\'s other recognized sections when present, escaped and unrendered as Markdown', () => {
+  test('renders the document\'s other recognized sections when present, as rendered Markdown', () => {
     const text = [
       '# sample',
       '',
@@ -473,7 +538,8 @@ suite('FeatureDetailPanel', () => {
 
     const html = panel.webviewPanel?.webview.html ?? '';
     assert.match(html, /<h2>Constraints<\/h2>/);
-    assert.ok(html.includes('Read-only, `never` writes.'));
+    assert.match(html, /<code>never<\/code>/);
+    assert.ok(!html.includes('`never`'));
   });
 
   test('omits an other-section region for a kind the document does not carry', () => {
@@ -766,11 +832,12 @@ suite('FeatureDetailPanel', () => {
       '',
       '## Objective',
       '',
-      'Ship the cache warmer.',
+      'Ship the **cache warmer**, see `plan.md` for the approach.',
       '',
       '## Constraints',
       '',
-      'No literal styling values anywhere.',
+      '- No literal styling values anywhere.',
+      '- Every rule reads a `--vscode-*` token.',
       '',
       '## Tasks',
       '',

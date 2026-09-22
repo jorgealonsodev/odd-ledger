@@ -1,12 +1,13 @@
 /**
- * Prepares a checklist item's raw evidence text to be embedded inside a
- * vscode.MarkdownString (currently the tree's task tooltip —
- * feature-tree-provider.ts). The detail panel keeps evidence in a
- * `<pre>`, verbatim, and is unaffected by any of this; only a Markdown
- * consumer needs the two corrections below, because rendering the raw
- * source as Markdown without them would come out worse than plain text.
+ * Prepares a checklist item's raw evidence text (or any other raw prose
+ * pulled from a feature document) to be rendered as Markdown: currently
+ * the tree's task tooltip (a vscode.MarkdownString — feature-tree-
+ * provider.ts) and the detail panel's evidence and prose regions (an HTML
+ * fragment via render-markdown.ts — feature-detail-panel.ts). Every
+ * Markdown consumer needs the two corrections below, because rendering
+ * the raw source without them would come out worse than plain text.
  *
- * Plain data transformation over an already-read evidence string — no
+ * Plain data transformation over an already-read text string — no
  * dependency on the editor API or the filesystem, same boundary as the
  * rest of src/domain/.
  */

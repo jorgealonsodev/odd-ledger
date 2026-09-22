@@ -126,6 +126,106 @@ suite('Extension activation', () => {
     await vscode.window.tabGroups.close(opened!);
   });
 
+  test('oddLedger.openFeature opens the detail panel in column one, never a column derived from whichever editor happens to be active', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    // A second editor, active in column two, before the panel opens at
+    // all: `vscode.ViewColumn.Beside` (the value this defect traces back
+    // to) means "the column after whichever one is active", so this is
+    // exactly the state that would land the panel in column three instead
+    // of its fixed home. `vscode.ViewColumn.Active` would fail the same
+    // way, landing the panel in column two instead of column one.
+    const scratch = await vscode.workspace.openTextDocument({ content: 'scratch', language: 'plaintext' });
+    await vscode.window.showTextDocument(scratch, { viewColumn: vscode.ViewColumn.Two });
+    const scratchTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    assert.equal(vscode.window.activeTextEditor?.viewColumn, vscode.ViewColumn.Two, 'expected column two to be active before opening the panel');
+
+    const model: FeatureModel = {
+      featureName: 'column-fixture-feature',
+      documentPath: '/workspace/odd/tasks/column-fixture-feature.md',
+      title: null,
+      branch: null,
+      progress: EMPTY_COUNTS,
+      sections: [],
+      nextStep: null,
+      structure: EMPTY_DOCUMENT_STRUCTURE,
+    };
+    const node = new FeatureNode(model);
+
+    await vscode.commands.executeCommand('oddLedger.openFeature', node);
+
+    const opened = await waitForWebviewTab('column-fixture-feature');
+    assert.ok(opened, 'expected a tab titled after the feature name to open');
+    assert.equal(
+      opened!.group.viewColumn,
+      vscode.ViewColumn.One,
+      'expected the panel to open in column one regardless of which column was active',
+    );
+
+    await vscode.window.tabGroups.close(opened!);
+    if (scratchTab) {
+      await vscode.window.tabGroups.close(scratchTab);
+    }
+  });
+
+  test('opening a second feature while a different column is active does not move the already-open panel out of column one', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const firstModel: FeatureModel = {
+      featureName: 'reveal-fixture-first',
+      documentPath: '/workspace/odd/tasks/reveal-fixture-first.md',
+      title: null,
+      branch: null,
+      progress: EMPTY_COUNTS,
+      sections: [],
+      nextStep: null,
+      structure: EMPTY_DOCUMENT_STRUCTURE,
+    };
+    await vscode.commands.executeCommand('oddLedger.openFeature', new FeatureNode(firstModel));
+    const firstTab = await waitForWebviewTab('reveal-fixture-first');
+    assert.ok(firstTab, 'expected the first feature\'s panel to open');
+    assert.equal(firstTab!.group.viewColumn, vscode.ViewColumn.One);
+
+    // A different column becomes active before the second click — exactly
+    // the condition that would drag an already-open panel's tab into
+    // whatever group is now active, if reveal() ever passed a column
+    // computed from "active" instead of staying put.
+    const scratch = await vscode.workspace.openTextDocument({ content: 'scratch', language: 'plaintext' });
+    await vscode.window.showTextDocument(scratch, { viewColumn: vscode.ViewColumn.Two });
+    const scratchTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+    assert.equal(vscode.window.activeTextEditor?.viewColumn, vscode.ViewColumn.Two, 'expected column two to be active before the second click');
+
+    const secondModel: FeatureModel = {
+      featureName: 'reveal-fixture-second',
+      documentPath: '/workspace/odd/tasks/reveal-fixture-second.md',
+      title: null,
+      branch: null,
+      progress: EMPTY_COUNTS,
+      sections: [],
+      nextStep: null,
+      structure: EMPTY_DOCUMENT_STRUCTURE,
+    };
+    await vscode.commands.executeCommand('oddLedger.openFeature', new FeatureNode(secondModel));
+
+    const revealedTab = await waitForWebviewTab('reveal-fixture-second');
+    assert.ok(revealedTab, 'expected the same panel, retitled for the second feature');
+    assert.equal(
+      revealedTab!.group.viewColumn,
+      vscode.ViewColumn.One,
+      'expected the panel tab to stay in column one rather than following the newly active column',
+    );
+    assert.equal(webviewTabs().length, 1, 'expected exactly one detail panel tab: the panel reused, not duplicated');
+
+    await vscode.window.tabGroups.close(revealedTab!);
+    if (scratchTab) {
+      await vscode.window.tabGroups.close(scratchTab);
+    }
+  });
+
   // --- oddLedger.openTask: reveal + panel together, from one click ---------
 
   function writeFixtureFeature(dir: string, featureName: string, lines: string[]): { featureNode: FeatureNode; documentPath: string } {
@@ -191,9 +291,11 @@ suite('Extension activation', () => {
       assert.ok(editor, 'expected a text editor to become active');
       assert.equal(editor!.document.uri.fsPath, documentPath);
       assert.equal(editor!.selection.start.line, 5);
+      assert.equal(editor!.viewColumn, vscode.ViewColumn.One, 'expected the document in column one');
 
       const opened = await waitForWebviewTab('sample-feature');
       assert.ok(opened, 'expected the feature\'s detail panel to also open');
+      assert.equal(opened!.group.viewColumn, vscode.ViewColumn.One, 'expected the panel as a tab in the same column as the document');
 
       await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
       await vscode.window.tabGroups.close(opened!);
