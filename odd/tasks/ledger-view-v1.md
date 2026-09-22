@@ -364,6 +364,24 @@ user's decisions under ordinary repository policy.
       authority burned.** Seven advisory findings; one of them describes a real input class
       and is raised as T18 below, the rest are recorded under Progress.
 
+- [ ] T23 The Review row does not take the most recent review
+      Its two loops run in opposite directions: the outer keeps the last matching item
+      across sections while the inner returns the first matching line within an item, so
+      the value is neither consistently the newest nor the oldest. Found by the T12
+      review. Pick one order and make the tests pin it.
+      Route: delegated writer.
+
+- [ ] T24 Two table rows are cut mid-sentence at the document's own line wrap
+      The line-budget row selects a delivery line because a figure appears in it, then
+      truncates that line at a character budget, so a figure sitting past the budget is
+      cut out of the very row that exists to show it. Verified by the parent against this
+      repository's document, where the row reads `roughly 2,800 authored changed lines
+      including tests. It was low: the count` and simply stops. The TDD row stops
+      similarly. **This is the same root cause the T8 review raised against the next-step
+      extractor**: a hard-wrapped sentence is cut at the source's wrap rather than at a
+      sentence boundary. Two independent reports on one input class make it a task.
+      Route: delegated writer.
+
 - [ ] T21 A section holding checklist items renders twice in the panel body
       The body renders item-bearing sections as task lists and, separately, every
       recognized optional section as prose. A section that is both — an `Acceptance
@@ -526,10 +544,35 @@ user's decisions under ordinary repository policy.
       **Approved with zero blocking findings, acknowledged, authority burned.** Eight
       advisory findings; they are raised as T21 and T22 below.
 
-- [ ] T12 Detail panel: "Recorded by this document"
+- [x] T12 Detail panel: "Recorded by this document"
       One table of the rare contract fields — TDD, delivery, route, line budget, review —
       each showing its value or `not recorded`.
-      Route: delegated writer.
+      Route: delegated writer. Trigger evidence: 4 files, one new domain module.
+      DONE `280811b`.
+      **Every row always renders.** These fields appear in as few as one of five real
+      documents, so the region exists to be one honest table rather than six regions that
+      disappear when empty. A field the document does not record says so.
+      Route has no section of its own: it is recorded per task, so the row counts the items
+      whose evidence carries a route note. That counts what the document states. No row
+      computes a value the document does not, which is why the line budget reports the
+      figure as written rather than deriving one.
+      Review has no section kind either. The writer read it from the review evidence on
+      task items, taking the most recently recorded — a reading the brief left open, and
+      the one the review then found to be implemented incorrectly (see T23).
+      Verified by the parent against this repository's own document, which renders all
+      five rows populated, including `per task, 22 of 33 recorded`.
+      Evidence: `npm run check-types` clean; `npm run test:domain` 178 tests, 177 pass,
+      1 skipped; `npm run test:extension` 58 passing in the no-folder profile and 17 in the
+      workspace profile; `npm run bundle` exit 0; `grep` over `src/domain/` for a `vscode`
+      import returns clean. RED observed first as `TS2307` on the missing module; the
+      adapter's RED was obtained by stashing only the implementation file and watching
+      exactly the three new tests fail. Seven behaviours were then falsified one at a time
+      and reverted byte-identical, confirmed by checksum.
+      Review: RDD assess over `35fa660..280811b` returned risk **medium** (executable
+      change in an adapter test file, 612 lines, slice budget reached). Consent granted by
+      the user. Lineage `review-e2c51a1f8b6dff27`, one lens (`review-reliability`).
+      **Approved with zero blocking findings, acknowledged, authority burned.** Six
+      advisory findings; two are real defects and are raised as T23 and T24.
 
 - [ ] T13 Git-derived history
       `git log --follow` over the document; completion ratio recomputed per revision; a
@@ -587,7 +630,7 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 11 of 22 tasks closed.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 12 of 24 tasks closed.
 
 | Commit | What |
 |--------|------|
@@ -618,6 +661,8 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 11 of 22 tasks c
 | `934a288` | T10 detail panel header and tiles |
 | `64c3bab` | T10 review approved, recorded as closed |
 | `84b5ddf` | T11 panel body, and five T10 findings closed |
+| `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
+| `280811b` | T12 recorded-by-this-document table |
 
 Running authored count: roughly 2,750 lines against a ~2,800 forecast. The forecast was
 low: it was met with twelve tasks still open. The delivery budget, not the forecast, is
@@ -697,6 +742,15 @@ headings are handled two ways, with the objective lookup taking the first match 
 optional-section pass taking all of them; and the empty-structure fallback is one shared
 exported object whose array instance is reused by production and four fixtures.
 
+**Advisory findings from the T12 review (2026-09-22), none blocking.** Two became T23 and
+T24. The rest: the escaping test asserts the escaped markup appears somewhere in the page
+rather than in the cell it is about, and the body renderer emits prose elsewhere that
+could satisfy it; both aggregation helpers walk every item-bearing section but every test
+document has exactly one, so the outer loop is never exercised; the truncation tests
+assert only that the value shrank and ends in an ellipsis, so the stated budget is not
+pinned; and a line that is nothing but a label falls back to rendering the label the row
+already names.
+
 **Tooling, recorded because it affected this session's work.** The CodeGraph index had
 gone stale: its daemon exits five minutes after its last client disconnects, and a
 delegated writer runs longer than that with no query in between, so nothing watched the
@@ -715,5 +769,5 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-Next is T12: the "Recorded by this document" table. The reviewed boundary is the commit
-that records this closure, the last one in the Progress table.
+Next is T13: git-derived history. The reviewed boundary is the commit that records this
+closure, the last one in the Progress table.
