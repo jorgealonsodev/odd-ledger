@@ -699,13 +699,19 @@ user's decisions under ordinary repository policy.
 
 ### Cleanup pass
 
+**Closed on 2026-09-22 in four batches**, grouped by module and root cause rather than run
+one task at a time: the parsers (`3b93dd7`), the panel body's regions (`a273ea6`), the
+recorded-by table (`c907f7f`), and the remaining rules and assertions (`aff116f`). Four
+writer runs instead of eight, and one accumulated slice review instead of eight.
+Three of the eight were not what their own descriptions said, which is recorded with each.
+
 Every item below is a defect an approved review raised, or one the parent verified
 against a real document. None of them blocked their review. They were interleaved with
 the feature work until 2026-09-22, which made the remaining list grow faster than it
 shrank; the user moved them here so the feature reaches its shape first and the
 defects close as one pass afterwards. Order within the pass is not fixed.
 
-- [ ] T17 Survive a malformed document
+- [x] T17 Survive a malformed document
       An unterminated code fence currently swallows the rest of a document in both the
       structure parser and the checklist parser. Raised as an advisory finding by two
       consecutive independent reviews, which is why it is a task rather than a note.
@@ -713,7 +719,7 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       `endLine` drifting for a document with no trailing newline.
       Route: delegated writer.
 
-- [ ] T18 A Next step written as a checklist item renders twice
+- [x] T18 A Next step written as a checklist item renders twice
       The section filter keeps every section holding at least one checklist item, and the
       next step is additionally emitted as its own node, so a document whose `## Next step`
       is written as a list item renders it in both places. Raised by the T8 review as an
@@ -722,7 +728,7 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       two renderings wins, not a typo.
       Route: direct inline.
 
-- [ ] T19 Closedness and the `Open` filter disagree about which sections count
+- [x] T19 Closedness and the `Open` filter disagree about which sections count
       `isFeatureClosed` reads only `progress`, which sums the sections that count toward
       it, while the `Open` filter admits items from every section regardless. A feature
       whose progress-bearing sections are all done therefore renders muted and sorted last
@@ -730,7 +736,7 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       has to give; which one is the decision this task carries.
       Route: delegated writer.
 
-- [ ] T20 The locale test compares a precomposed filename byte-exact
+- [x] T20 The locale test compares a precomposed filename byte-exact
       It writes a document whose filename carries a precomposed diacritic and compares the
       discovered feature name with `deepEqual`. A filesystem that normalizes filenames to
       their decomposed form returns a different byte sequence for the same name, so the
@@ -738,7 +744,7 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       sides, or assert on relative order rather than exact strings.
       Route: delegated writer.
 
-- [ ] T21 A section holding checklist items renders twice in the panel body
+- [x] T21 A section holding checklist items renders twice in the panel body
       The body renders item-bearing sections as task lists and, separately, every
       recognized optional section as prose. A section that is both — an `Acceptance
       criteria` heading whose items are checkboxes — appears in both regions. Verified by
@@ -747,7 +753,7 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       decision about which region wins, not a typo.
       Route: delegated writer.
 
-- [ ] T22 Three assertions in the panel work do not observe what they name
+- [x] T22 Three assertions in the panel work do not observe what they name
       From the T11 review. The no-argument command test samples the webview tab count
       synchronously around a command whose own file documents that tab state settles
       asynchronously, so it cannot fail. The workspace-profile test names workspace-root
@@ -759,14 +765,14 @@ defects close as one pass afterwards. Order within the pass is not fixed.
       it a task rather than a note: the pattern is the defect.
       Route: delegated writer.
 
-- [ ] T23 The Review row does not take the most recent review
+- [x] T23 The Review row does not take the most recent review
       Its two loops run in opposite directions: the outer keeps the last matching item
       across sections while the inner returns the first matching line within an item, so
       the value is neither consistently the newest nor the oldest. Found by the T12
       review. Pick one order and make the tests pin it.
       Route: delegated writer.
 
-- [ ] T24 Two table rows are cut mid-sentence at the document's own line wrap
+- [x] T24 Two table rows are cut mid-sentence at the document's own line wrap
       The line-budget row selects a delivery line because a figure appears in it, then
       truncates that line at a character budget, so a figure sitting past the budget is
       cut out of the very row that exists to show it. Verified by the parent against this
@@ -804,8 +810,43 @@ Before delivery: both suites, `tsc --noEmit`, and a manual render of all five re
 
 ## Progress
 
-Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 16 of 24 tasks closed.
-**Every feature task is now done.** What remains is the cleanup pass.
+Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. **24 of 24 tasks closed.**
+
+**What the cleanup pass actually found**, beyond closing the eight defects.
+
+`T17`'s description was wrong about where the end-line drift lived. It said documents with
+no trailing newline; the drift was in the ordinary case of a file saved with one, because
+splitting on the line terminator leaves an empty element behind. Read against this
+repository's own thousand-line document, the last section reported one line too many. The
+defect had been described from reading the code and described incorrectly; only running it
+against a real document showed where it was.
+Its fence recovery is deterministic rather than heuristic: a fence is only a fence when a
+closing marker exists ahead of it, so a fence that does close behaves exactly as before,
+including the fixture whose fenced block deliberately holds a heading and a checklist item.
+
+`T18` and `T21` were one defect wearing two hats. The body chose its regions with two
+independent filters, so anything satisfying both rendered twice. A section holding items
+now claims itself and the prose region skips what is claimed, because the task rendering
+carries the state and evidence of every item and raw text does not.
+
+`T24` did not widen a budget, which would have moved the cut rather than fixing it. A
+hard-wrapped paragraph is one sentence to a reader, so it is rejoined before being read.
+The same defect lived in the next-step extractor, reported separately by an earlier review,
+and now shares the one helper.
+That fix then overshot: preferring a sentence boundary took the earliest one, so the mode
+row said only that it was enabled and dropped where that came from. Caught by rendering the
+table against this repository's own document rather than by a test, and corrected in the
+next batch. A row that is grammatically whole and says nothing is not an improvement.
+
+`T19` was a genuine decision, not a typo. Closedness and the `Open` filter disagreed about
+which sections count, so a feature could render finished and muted while the filter still
+listed its outstanding work. Closedness now asks the filter's question. The progress ratio
+keeps its narrower rule, chosen deliberately under T5, so the two answer different
+questions consistently instead of the same question differently.
+
+`T22` closed the defect class these reviews kept finding: assertions naming a subject they
+never observed. Every one of this feature's reviews found some, and one set was introduced
+while fixing another. The three here were falsified individually before being trusted.
 
 | Commit | What |
 |--------|------|
@@ -853,6 +894,11 @@ Branch `feat/ledger-view-v1`, pushed to `origin` on 2026-09-21. 16 of 24 tasks c
 | `5b7e2be` | T14/T15 slice correction: the refresh gained a failure path |
 | `b9de37a` | T14/T15 slice review approved and acknowledged |
 | `aba99fa` | T16 packaging, README and the settings reference |
+| `4378877` | T16 recorded as closed; the feature work complete |
+| `3b93dd7` | Cleanup 1: a malformed document keeps its own content |
+| `a273ea6` | Cleanup 2: one section belongs to one region |
+| `c907f7f` | Cleanup 3: a wrapped paragraph read as the sentence it is |
+| `aff116f` | Cleanup 4: assertions that observe their subject, closedness agreed |
 | `35fa660` | T11 review approved, recorded as closed; T21 and T22 raised |
 | `280811b` | T12 recorded-by-this-document table |
 | `5b7e2be` | T14/T15 slice review correction: the watcher-driven refresh gets a real failure path |
@@ -976,16 +1022,15 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-The feature work is complete. What remains is the cleanup pass, T17 to T24: eight defects
-that approved reviews raised or the parent verified, none of which blocked their review.
-They were moved out of the feature list on 2026-09-22 so the remaining count stopped
-growing faster than it shrank.
+**Every task in this document is closed.** The remaining work is the accumulated slice's
+review, and then delivery, which is not this document's to decide.
 
-Two things wait on the repository owner. Twenty-three commits sit unpushed on this branch,
-and pushing is theirs to decide. And five non-terminal review lineages have accumulated in
+Three things wait on the repository owner. Twenty-three commits sit unpushed on this branch,
+and pushing is theirs to decide. Five non-terminal review lineages have accumulated in
 the store, three of them from the T13 arc including one left escalated after its targeted
 validator rejected a correction; none blocks anything, but they should be disposed of
-deliberately rather than left behind.
+deliberately rather than left behind. And the cleanup commits have not been reviewed: they
+form one accumulated slice whose review is the next step.
 
 **The T14 and T15 slice was reviewed and approved**, lineage `review-5fdd501c4d53856e`,
 one lens. It found one critical defect worth recording for its irony: the watcher-driven
