@@ -135,6 +135,120 @@ test('otherSections omits a recognized section whose body is empty', () => {
   );
 });
 
+// --- exclusive partition: a section with items renders once, as a task ----
+
+test('an Acceptance criteria section written as checkboxes appears exactly once, as a task section', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Acceptance criteria',
+    '',
+    '- [ ] All five documents parse.',
+    '- [x] The chart renders past the threshold.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+  const body = buildPanelBody(model);
+
+  assert.deepEqual(
+    body.taskSections.map((s) => s.heading),
+    ['Acceptance criteria', 'Tasks'],
+  );
+  assert.equal(body.taskSections[0].items.length, 2);
+  // The same heading must not also appear as raw prose: the task rendering
+  // already carries strictly more information (state and evidence per
+  // item) than the prose region would.
+  assert.deepEqual(
+    body.otherSections.map((s: { heading: string }) => s.heading),
+    [],
+  );
+});
+
+test('an Objective section written as checkboxes is rendered only as a task section, never merged into the objective prose', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Objective',
+    '',
+    '- [ ] Ship the tracker.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+  const body = buildPanelBody(model);
+
+  assert.deepEqual(
+    body.taskSections.map((s) => s.heading),
+    ['Objective', 'Tasks'],
+  );
+  assert.equal(body.objective, null);
+});
+
+test('no recognized section kind that holds checklist items ever appears in both taskSections and otherSections', () => {
+  // Every kind OTHER_SECTION_KINDS can claim, plus Tasks itself, each
+  // written with one checklist item. If a future exclusion fix special-
+  // cased one heading instead of the general "has items" rule, this would
+  // still catch every other kind leaking into both regions.
+  const headings = [
+    'Constraints',
+    'Scope',
+    'Acceptance criteria',
+    'Progress',
+    'TDD mode',
+    'Checks',
+    'Decision taken',
+    'Delivery',
+    'Why',
+    'Tasks',
+  ];
+  const text = [
+    '# sample',
+    '',
+    ...headings.flatMap((heading) => ['', `## ${heading}`, '', `- [ ] Do the ${heading} thing.`]),
+  ].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+  const body = buildPanelBody(model);
+
+  const taskHeadings = new Set(body.taskSections.map((s) => s.heading));
+  const otherHeadings = new Set(body.otherSections.map((s: { heading: string }) => s.heading));
+
+  for (const heading of headings) {
+    assert.ok(taskHeadings.has(heading), `${heading} should render as a task section`);
+    assert.ok(!otherHeadings.has(heading), `${heading} must not also render as prose`);
+  }
+});
+
+test('a Next step section written as a checklist item never renders as a task section or as prose', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Next step',
+    '',
+    '- [ ] Ship the remaining task.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+  const body = buildPanelBody(model);
+
+  assert.deepEqual(
+    body.taskSections.map((s) => s.heading),
+    ['Tasks'],
+  );
+  assert.deepEqual(
+    body.otherSections.map((s: { heading: string }) => s.heading),
+    [],
+  );
+  assert.ok(model.nextStep);
+});
+
 // --- the unproven task message constant -----------------------------------
 
 test('UNPROVEN_TASK_MESSAGE states what is missing in ODD\'s own terms', () => {

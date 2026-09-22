@@ -88,16 +88,51 @@ function findSection(sections: readonly DocumentSection[], kind: SectionKind): D
   return sections.find((section) => section.kind === kind);
 }
 
-function buildObjective(sections: readonly DocumentSection[]): string | null {
-  const bodies = OBJECTIVE_REGION_KINDS.map((kind) => findSection(sections, kind)?.body).filter(
-    (body): body is string => Boolean(body && body.length > 0),
-  );
+/**
+ * Ownership rule that keeps the three body regions an exclusive partition
+ * of `model.structure.sections`, so no heading is ever assembled into two
+ * regions at once.
+ *
+ * `model.sections` (buildFeatureModel's own item-bearing sections, already
+ * excluding `next-step` — see that module) is the single source of truth
+ * for "this section holds checklist items". Its `headingLine`s are the
+ * claim: any structure section whose `headingLine` is claimed here belongs
+ * to the taskSections region and nowhere else, because rendering an item's
+ * state and evidence carries strictly more information than repeating its
+ * heading's raw body as prose. Both the objective region (below) and the
+ * other-sections region check this same claim before including a section,
+ * so a kind added to OTHER_SECTION_KINDS in the future is excluded by
+ * construction the moment it holds items, without needing its own
+ * special case here.
+ *
+ * `headingLine` (rather than `kind`) is the identity used for the claim
+ * because a kind is not unique per document — nothing stops two `##`
+ * sections resolving to the same kind — while a heading's line number is.
+ */
+function claimedHeadingLines(taskSections: readonly SectionModel[]): ReadonlySet<number> {
+  return new Set(taskSections.map((section) => section.headingLine));
+}
+
+function buildObjective(sections: readonly DocumentSection[], claimed: ReadonlySet<number>): string | null {
+  const bodies = OBJECTIVE_REGION_KINDS.map((kind) => findSection(sections, kind))
+    .filter((section): section is DocumentSection => section !== undefined && !claimed.has(section.headingLine))
+    .map((section) => section.body)
+    .filter((body) => body.length > 0);
   return bodies.length > 0 ? bodies.join('\n\n') : null;
 }
 
-function buildOtherSections(sections: readonly DocumentSection[]): PanelBodyDocumentSection[] {
+function buildOtherSections(
+  sections: readonly DocumentSection[],
+  claimed: ReadonlySet<number>,
+): PanelBodyDocumentSection[] {
   return sections
-    .filter((section) => section.kind !== null && OTHER_SECTION_KINDS.has(section.kind) && section.body.length > 0)
+    .filter(
+      (section) =>
+        section.kind !== null &&
+        OTHER_SECTION_KINDS.has(section.kind) &&
+        section.body.length > 0 &&
+        !claimed.has(section.headingLine),
+    )
     .map((section) => ({ heading: section.heading, body: section.body }));
 }
 
@@ -108,9 +143,10 @@ function buildOtherSections(sections: readonly DocumentSection[]): PanelBodyDocu
  */
 export function buildPanelBody(model: FeatureModel): PanelBody {
   const { sections } = model.structure;
+  const claimed = claimedHeadingLines(model.sections);
   return {
-    objective: buildObjective(sections),
+    objective: buildObjective(sections, claimed),
     taskSections: model.sections,
-    otherSections: buildOtherSections(sections),
+    otherSections: buildOtherSections(sections, claimed),
   };
 }

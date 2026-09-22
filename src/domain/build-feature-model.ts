@@ -219,6 +219,16 @@ export function buildFeatureModel(featureName: string, documentPath: string, tex
       // fenced-example-only section never becomes a tree node.
       continue;
     }
+    if (derivedSection.kind === 'next-step') {
+      // Ownership: the next-step region belongs to the tree's NextStepNode
+      // and the panel header's "NEXT STEP" block (both built from `nextStep`
+      // below), never to the ordinary task-section list, regardless of
+      // whether its body happens to be written as a checklist item. Those
+      // two regions already exist specifically to surface this line, so an
+      // item-bearing `## Next step` section would otherwise render a third
+      // time here with nothing left to distinguish it from an ordinary task.
+      continue;
+    }
     sections.push({
       heading: derivedSection.heading,
       kind: derivedSection.kind,

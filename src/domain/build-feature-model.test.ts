@@ -96,6 +96,31 @@ test('buildFeatureModel excludes sections with no checklist items', () => {
   );
 });
 
+test('buildFeatureModel excludes the Next step section from sections even when it is written as a checklist item', () => {
+  const text = [
+    '# sample',
+    '',
+    '## Next step',
+    '',
+    '- [ ] Ship the remaining task.',
+    '',
+    '## Tasks',
+    '',
+    '- [ ] T1 Do it',
+  ].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+
+  // The next-step region is owned by the header/tree node (model.nextStep),
+  // never by the ordinary task-section list, regardless of how its body is
+  // written.
+  assert.deepEqual(
+    model.sections.map((s) => s.heading),
+    ['Tasks'],
+  );
+  assert.ok(model.nextStep);
+  assert.equal(model.nextStep!.line, '[ ] Ship the remaining task.');
+});
+
 // --- buildFeatureModel: commit reference (evidence vs rawText) -----------
 
 test('buildFeatureModel finds a commit reference in an item\'s evidence', () => {
