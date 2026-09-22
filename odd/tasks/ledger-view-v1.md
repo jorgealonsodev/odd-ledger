@@ -1016,6 +1016,22 @@ panel kept showing content that was no longer true. A refresh feature that fails
 that way puts the view back to lying about being current — exactly the problem T15 exists
 to remove. Corrected in `5b7e2be`.
 
+**The final slice — T16 and the four-batch cleanup pass — is reviewed and approved**,
+lineage `review-18b6367ac3fa8602`, one lens (`review-reliability`), and the exact
+acknowledgement burned its authority. Every finding it raised was advisory. The sharpest
+one: `unwrapLines` only starts a new logical line after a blank line, a bold span or a
+`Label:` prefix, so two consecutive Markdown bullets with no blank line between them still
+get joined into one — the same defect class T24 was raised to fix, now reappearing in an
+input class no test covers. The rest are lighter: an unterminated fence can still pair
+with a later block's real opening marker and swallow the section between them; a stray
+second H1 opens its own untyped section, and items after it may shift into or out of
+progress counting with no model-level test watching; the new packaging clean script uses
+`rm -rf` and is not portable to a Windows shell without a POSIX layer; and the no-argument
+guard's negative test waits a fixed 500 ms while the matching positive helper polls for up
+to 2000 ms, leaving a window where a slow host could still miss a wrongly opened panel.
+None of these opened a correction or reopened the review. **Every task in this document is
+now closed and reviewed.**
+
 ## Next step
 
 Both decisions that waited on the repository owner are settled: the branch was pushed as
