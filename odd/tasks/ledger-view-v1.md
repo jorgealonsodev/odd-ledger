@@ -1124,15 +1124,25 @@ Both decisions that waited on the repository owner are settled: the branch was p
 it stood on 2026-09-21 with the residue in `8d2c859` and `dd6fd03` known and accepted, and
 the T7 review was granted, approved and acknowledged on 2026-09-22.
 
-**Every task in this document is closed.** The remaining work is the accumulated slice's
-review, and then delivery, which is not this document's to decide.
+**Every task in this document is closed, and the work has been delivered.**
 
-Three things wait on the repository owner. Twenty-three commits sit unpushed on this branch,
-and pushing is theirs to decide. Five non-terminal review lineages have accumulated in
-the store, three of them from the T13 arc including one left escalated after its targeted
-validator rejected a correction; none blocks anything, but they should be disposed of
-deliberately rather than left behind. And the cleanup commits have not been reviewed: they
-form one accumulated slice whose review is the next step.
+**The feature shipped on 2026-09-22 as version 1.0.0.** The branch was pushed, `main` was
+created on the remote at the root commit `8d2c859`, and pull request #1 merged the
+fifty-eight commits into it with a merge commit, `0094f96`, rather than a squash: this
+document names individual commits as the evidence that closed its tasks, and a squash would
+have turned every one of those references into a hash that no longer exists. Continuous
+integration ran green on Node 20 and Node 24. `main` is now the default branch, the tag
+`v1.0.0` sits on the merge commit, and the release carries the installable artifact
+`odd-ledger-1.0.0.vsix`, 143,555 bytes, downloaded back from the release page to confirm it
+serves.
+
+One thing still waits on the repository owner. Five non-terminal review lineages have
+accumulated in the store, three of them from the T13 arc including one left escalated after
+its targeted validator rejected a correction. None blocks anything, but they should be
+disposed of deliberately rather than left behind.
+
+Publishing to the Visual Studio Marketplace is the remaining step and is not this
+document's to take: it needs the owner's own Azure DevOps publisher token.
 
 **The T14 and T15 slice was reviewed and approved**, lineage `review-5fdd501c4d53856e`,
 one lens. It found one critical defect worth recording for its irony: the watcher-driven
