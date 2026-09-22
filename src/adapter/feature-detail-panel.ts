@@ -304,6 +304,48 @@ function renderHistory(history: FeatureHistory): string {
 }
 
 /**
+ * The panel's content when the document behind it no longer exists on
+ * disk (T15: a file-watcher delete event for the document currently
+ * open). Follows the same "say what happened" absence convention as
+ * every other region in this panel, rather than leaving the last
+ * successful render in place or clearing it to a blank page. Its own
+ * minimal Content-Security-Policy mirrors renderHtml's — no scripts, one
+ * nonce-scoped inline stylesheet — but needs no font-src exception: this
+ * page loads no codicon glyphs.
+ */
+function renderRemovedHtml(featureName: string): string {
+  const nonce = createNonce();
+  const csp = `default-src 'none'; style-src 'nonce-${nonce}';`;
+  const title = escapeHtml(featureName || VIEW_TITLE_FALLBACK);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="${csp}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<style nonce="${nonce}">
+  body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-editor-background);
+    padding: 16px;
+  }
+  .removed-message {
+    color: var(--vscode-descriptionForeground);
+  }
+</style>
+</head>
+<body>
+  <h1>${title}</h1>
+  <p class="removed-message">This feature document is no longer on disk. It may have been deleted, moved, or renamed.</p>
+</body>
+</html>`;
+}
+
+/**
  * Renders the panel's full HTML document. Styles only against VS Code's
  * injected `--vscode-*` CSS variables and the `body.vscode-light`,
  * `body.vscode-dark` and `body.vscode-high-contrast` classes VS Code sets
@@ -546,6 +588,12 @@ function renderHtml(
 export class FeatureDetailPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
 
+  /** The document path of the feature currently rendered in the panel, or
+   * `undefined` when no panel is open. Lets the file watcher (T15) decide
+   * whether a changed or deleted document is the one currently on screen
+   * without this class handing out anything more than that one path. */
+  private currentDocumentPath: string | undefined;
+
   /** `extensionUri` locates the extension's own install directory, needed
    * to resolve the codicon font file (see show() and renderHtml) through
    * `webview.asWebviewUri` — a webview cannot load a `file://` path
@@ -557,6 +605,11 @@ export class FeatureDetailPanel implements vscode.Disposable {
    * webview without this class handing out write access to its lifecycle. */
   get webviewPanel(): vscode.WebviewPanel | undefined {
     return this.panel;
+  }
+
+  /** See currentDocumentPath. */
+  get openDocumentPath(): string | undefined {
+    return this.currentDocumentPath;
   }
 
   /**
@@ -579,6 +632,7 @@ export class FeatureDetailPanel implements vscode.Disposable {
     const header = buildPanelHeader(model, workspaceRoot, lastWork);
     const body = buildPanelBody(model);
     const recordedFields = buildRecordedFields(model);
+    this.currentDocumentPath = model.documentPath;
 
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
@@ -603,12 +657,32 @@ export class FeatureDetailPanel implements vscode.Disposable {
     this.panel.webview.html = renderHtml(header, body, recordedFields, history, this.panel.webview, this.extensionUri);
     this.panel.onDidDispose(() => {
       this.panel = undefined;
+      this.currentDocumentPath = undefined;
     });
+  }
+
+  /**
+   * Re-renders the open panel to state that its document no longer
+   * exists on disk (T15: a file-watcher delete event for the document
+   * currently shown). Follows this feature's absence convention — say
+   * what happened, never leave a blank or a stale view — rather than
+   * leaving the last successful render in place. A no-op when no panel
+   * is open, e.g. the user already closed it before the delete event
+   * arrived.
+   */
+  showRemoved(featureName: string): void {
+    if (!this.panel) {
+      return;
+    }
+    this.panel.title = featureName || VIEW_TITLE_FALLBACK;
+    this.panel.webview.html = renderRemovedHtml(featureName);
+    this.currentDocumentPath = undefined;
   }
 
   /** Disposes the open panel, if any. Safe to call when none is open. */
   dispose(): void {
     this.panel?.dispose();
     this.panel = undefined;
+    this.currentDocumentPath = undefined;
   }
 }

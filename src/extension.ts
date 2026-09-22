@@ -1,8 +1,10 @@
 import { dirname } from 'node:path';
 import * as vscode from 'vscode';
 import { FeatureDetailPanel } from './adapter/feature-detail-panel';
+import { FeatureDocumentWatcher } from './adapter/feature-document-watcher';
 import type { FeatureNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
+import { refreshOpenPanelIfTouched } from './adapter/refresh-open-panel';
 import { fetchDocumentRevisions } from './domain/fetch-git-revisions';
 import { runOpenFeatureFetch } from './domain/run-open-feature-fetch';
 
@@ -57,12 +59,24 @@ export function activate(context: vscode.ExtensionContext): void {
     provider.setFilter('unproven');
   });
   context.subscriptions.push(filterUnprovenCommand);
+
+  // T15: keeps the tree and any open panel honest without a manual
+  // refresh. A debounced batch of odd/tasks/*.md change/create/delete
+  // events (across every workspace folder, and rebuilt when the folder
+  // set itself changes) always rebuilds the tree; refreshOpenPanelIfTouched
+  // decides whether the currently open panel's own document was among
+  // them and, if so, re-renders it or states that it is gone.
+  const documentWatcher = new FeatureDocumentWatcher(({ touchedPaths }) => {
+    provider.refresh();
+    void refreshOpenPanelIfTouched(detailPanel, touchedPaths);
+  });
+  context.subscriptions.push(documentWatcher);
 }
 
 export function deactivate(): void {
   // Everything activate() created (the tree view, the detail panel
-  // manager, the refresh command, openFeature, and the three filter
-  // commands) is a disposable pushed to context.subscriptions, so VS Code
-  // tears it down on its own. Nothing else was allocated, so there is
-  // nothing to do here.
+  // manager, the refresh command, openFeature, the three filter commands,
+  // and the document watcher) is a disposable pushed to
+  // context.subscriptions, so VS Code tears it down on its own. Nothing
+  // else was allocated, so there is nothing to do here.
 }

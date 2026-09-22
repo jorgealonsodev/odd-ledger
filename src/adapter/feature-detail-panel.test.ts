@@ -162,6 +162,58 @@ suite('FeatureDetailPanel', () => {
     assert.notEqual(secondPanel, firstPanel);
   });
 
+  test('openDocumentPath is undefined until a panel has been shown', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    assert.equal(panel.openDocumentPath, undefined);
+  });
+
+  test('openDocumentPath tracks the document of whichever feature was shown most recently', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model({ featureName: 'cache-warm-v2', documentPath: '/workspace/odd/tasks/cache-warm-v2.md' }), '/workspace');
+    assert.equal(panel.openDocumentPath, '/workspace/odd/tasks/cache-warm-v2.md');
+
+    panel.show(model({ featureName: 'other-feature', documentPath: '/workspace/odd/tasks/other-feature.md' }), '/workspace');
+    assert.equal(panel.openDocumentPath, '/workspace/odd/tasks/other-feature.md');
+  });
+
+  test('openDocumentPath is undefined again once the user closes the panel themselves', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model({ documentPath: '/workspace/odd/tasks/cache-warm-v2.md' }), '/workspace');
+    panel.webviewPanel!.dispose();
+
+    assert.equal(panel.openDocumentPath, undefined);
+  });
+
+  test('showRemoved replaces the panel content with a message stating the document is gone, and clears openDocumentPath', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model({ featureName: 'cache-warm-v2', documentPath: '/workspace/odd/tasks/cache-warm-v2.md' }), '/workspace');
+
+    panel.showRemoved('cache-warm-v2');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.match(html, /no longer on disk/i);
+    assert.doesNotMatch(html, /PROGRESS/, 'expected the stale header/tiles render to be fully replaced, not left underneath');
+    assert.equal(panel.openDocumentPath, undefined, 'expected the removed document to no longer be tracked as open');
+  });
+
+  test('showRemoved escapes the feature name it renders', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    const maliciousName = '<img src=x onerror=alert(1)>';
+    panel.show(model({ featureName: maliciousName, documentPath: '/workspace/odd/tasks/x.md' }), '/workspace');
+
+    panel.showRemoved(maliciousName);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.ok(!html.includes(maliciousName));
+    assert.ok(html.includes('&lt;img src=x onerror=alert(1)&gt;'));
+  });
+
+  test('showRemoved is a no-op when no panel is open', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.showRemoved('cache-warm-v2');
+    assert.equal(panel.webviewPanel, undefined);
+  });
+
   test('escapes a feature name containing markup: no unescaped angle bracket reaches the HTML', () => {
     panel = new FeatureDetailPanel(extensionUri);
     const maliciousName = '<img src=x onerror=alert(1)>';
