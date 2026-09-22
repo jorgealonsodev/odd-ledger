@@ -249,6 +249,36 @@ test('a Next step section written as a checklist item never renders as a task se
   assert.ok(model.nextStep);
 });
 
+// --- focused task ----------------------------------------------------------
+
+test('focusedTask is the item whose startLine matches focusedTaskStartLine', () => {
+  const text = ['# sample', '', '## Tasks', '', '- [ ] T1 First', '- [ ] T2 Second'].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+  const secondItem = model.sections[0].items[1];
+
+  const body = buildPanelBody(model, secondItem.startLine);
+
+  assert.equal(body.focusedTask, secondItem);
+});
+
+test('focusedTask is null when no focusedTaskStartLine is given', () => {
+  const text = ['# sample', '', '## Tasks', '', '- [ ] T1 First'].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+
+  const body = buildPanelBody(model);
+
+  assert.equal(body.focusedTask, null);
+});
+
+test('focusedTask is null when focusedTaskStartLine matches no item in the document', () => {
+  const text = ['# sample', '', '## Tasks', '', '- [ ] T1 First'].join('\n');
+  const model = buildFeatureModel('sample', '/does/not/matter/sample.md', text);
+
+  const body = buildPanelBody(model, 9999);
+
+  assert.equal(body.focusedTask, null);
+});
+
 // --- the unproven task message constant -----------------------------------
 
 test('UNPROVEN_TASK_MESSAGE states what is missing in ODD\'s own terms', () => {

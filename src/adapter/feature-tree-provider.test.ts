@@ -4,6 +4,7 @@ import {
   FeatureNode,
   FeatureTreeDataProvider,
   NextStepNode,
+  revealTaskArguments,
   SectionNode,
   TaskNode,
 } from './feature-tree-provider';
@@ -50,6 +51,21 @@ function section(overrides: Partial<SectionModel> & { items: ItemModel[] }): Sec
 
 function nextStep(overrides: Partial<NextStepModel> = {}): NextStepModel {
   return { line: 'Ship the remaining task.', headingLine: 40, ...overrides };
+}
+
+/** Every tooltip in this tree that can carry document text is a
+ * vscode.MarkdownString, never a plain string — this asserts that shape
+ * and reads its rendered value back out, so content assertions below stay
+ * readable while still proving the type on every call site that uses it.
+ * `appendText` (used for title/heading/branch text this extension itself
+ * derives, not free document prose) escapes a literal space as `&nbsp;`
+ * so Markdown never collapses or reflows it; that escaping is real and
+ * correct MarkdownString behaviour, not something these content
+ * assertions care about, so it is normalized back to an ordinary space
+ * before returning. */
+function markdownTooltipValue(tooltip: vscode.MarkdownString | string | vscode.MarkdownString[] | undefined): string {
+  assert.ok(tooltip instanceof vscode.MarkdownString, `expected a MarkdownString tooltip, got: ${JSON.stringify(tooltip)}`);
+  return (tooltip as vscode.MarkdownString).value.replace(/&nbsp;/g, ' ');
 }
 
 function feature(overrides: Partial<FeatureModel> = {}): FeatureModel {
@@ -125,12 +141,23 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
 
   test("a feature node's tooltip states absence rather than staying silent when there is no branch", () => {
     const node = new FeatureNode(feature({ branch: null }));
-    assert.match(node.tooltip as string, /no branch recorded/);
+    assert.match(markdownTooltipValue(node.tooltip), /no branch recorded/);
   });
 
   test("a feature node's tooltip names the branch when one is present", () => {
     const node = new FeatureNode(feature({ branch: 'feat/sample' }));
-    assert.match(node.tooltip as string, /feat\/sample/);
+    assert.match(markdownTooltipValue(node.tooltip), /feat\/sample/);
+  });
+
+  test("a feature node's tooltip leads with its full feature name, which the sidebar label can truncate", () => {
+    const node = new FeatureNode(feature({ featureName: 'a-very-long-feature-name-the-sidebar-would-cut' }));
+    assert.match(markdownTooltipValue(node.tooltip), /^a-very-long-feature-name-the-sidebar-would-cut/);
+  });
+
+  test("a feature node's tooltip is a MarkdownString, and is never trusted", () => {
+    const node = new FeatureNode(feature());
+    assert.ok(node.tooltip instanceof vscode.MarkdownString);
+    assert.notEqual((node.tooltip as vscode.MarkdownString).isTrusted, true);
   });
 
   test("a feature node's command opens the detail panel, passing itself as the argument (T10)", () => {
@@ -145,7 +172,7 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
   test('a section node shows its heading as written and its own done/total', () => {
     const parent = new FeatureNode(feature());
     const node = new SectionNode(
-      section({ heading: 'Acceptance criteria', kind: null, items: [], counts: { done: 1, total: 3, percentage: 33, doneUnproven: 0 } }),
+      section({ heading: 'Acceptance criteria', kind: null, items: [item({ id: 'T1', derivedState: 'open' })], counts: { done: 1, total: 3, percentage: 33, doneUnproven: 0 } }),
       parent,
     );
     assert.equal(node.label, 'Acceptance criteria');
@@ -153,6 +180,54 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
     assert.equal(node.contextValue, 'oddLedger.section');
     assert.equal(node.parent, parent);
+  });
+
+  test("a section node's tooltip leads with its full heading and states its own done/total, and is never trusted", () => {
+    const node = new SectionNode(
+      section({ heading: 'Acceptance criteria', items: [item({ id: 'T1', derivedState: 'done' })], counts: { done: 1, total: 3, percentage: 33, doneUnproven: 0 } }),
+      new FeatureNode(feature()),
+    );
+    assert.ok(node.tooltip instanceof vscode.MarkdownString);
+    assert.notEqual((node.tooltip as vscode.MarkdownString).isTrusted, true);
+    const value = markdownTooltipValue(node.tooltip);
+    assert.match(value, /^Acceptance criteria/);
+    assert.match(value, /1\/3 tasks done/);
+  });
+
+  // --- SectionNode rollup colouring -----------------------------------------
+
+  test('a section node with every item proven renders green with the pass icon, in place of the generic list glyph', () => {
+    const node = new SectionNode(
+      section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' })] }),
+      new FeatureNode(feature()),
+    );
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'pass');
+    const color = (node.iconPath as vscode.ThemeIcon).color;
+    assert.ok(color instanceof vscode.ThemeColor);
+    assert.equal(color!.id, 'testing.iconPassed');
+  });
+
+  test('a section node with an unproven item stays the warning colour, never green, even though every item is closed', () => {
+    const node = new SectionNode(
+      section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] }),
+      new FeatureNode(feature()),
+    );
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'warning');
+    const color = (node.iconPath as vscode.ThemeIcon).color;
+    assert.ok(color instanceof vscode.ThemeColor);
+    assert.equal(color!.id, 'problemsWarningIcon.foreground');
+  });
+
+  test('a section node with an open item keeps the plain list glyph and no theme colour override', () => {
+    const node = new SectionNode(
+      section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'open' })] }),
+      new FeatureNode(feature()),
+    );
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'list-unordered');
+    assert.equal((node.iconPath as vscode.ThemeIcon).color, undefined);
   });
 
   // --- TaskNode --------------------------------------------------------------
@@ -184,19 +259,26 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(node.parent, parent);
   });
 
-  const iconCases: Array<[DerivedItemState, string]> = [
-    ['open', 'circle-large-outline'],
-    ['done', 'pass'],
-    ['done-unproven', 'warning'],
-    ['declined', 'circle-slash'],
-    ['unknown', 'question'],
+  const iconCases: Array<[DerivedItemState, string, string | undefined]> = [
+    ['open', 'circle-large-outline', undefined],
+    ['done', 'pass', 'testing.iconPassed'],
+    ['done-unproven', 'warning', 'problemsWarningIcon.foreground'],
+    ['declined', 'circle-slash', 'disabledForeground'],
+    ['unknown', 'question', 'problemsErrorIcon.foreground'],
   ];
-  for (const [state, expectedIconId] of iconCases) {
-    test(`a task node in state "${state}" uses the ${expectedIconId} theme icon`, () => {
+  for (const [state, expectedIconId, expectedColorToken] of iconCases) {
+    test(`a task node in state "${state}" uses the ${expectedIconId} theme icon, coloured ${expectedColorToken ?? 'with no override'}`, () => {
       const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
       const node = new TaskNode(item({ derivedState: state }), parent, '/x/f.md');
       assert.ok(node.iconPath instanceof vscode.ThemeIcon);
-      assert.equal((node.iconPath as vscode.ThemeIcon).id, expectedIconId);
+      const icon = node.iconPath as vscode.ThemeIcon;
+      assert.equal(icon.id, expectedIconId);
+      if (expectedColorToken === undefined) {
+        assert.equal(icon.color, undefined);
+      } else {
+        assert.ok(icon.color instanceof vscode.ThemeColor, `expected state "${state}" to carry a ThemeColor`);
+        assert.equal((icon.color as vscode.ThemeColor).id, expectedColorToken);
+      }
     });
   }
 
@@ -218,23 +300,86 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(node.description, undefined);
   });
 
-  test("a task node's tooltip is the item's evidence when present", () => {
+  test("a task node's tooltip is a MarkdownString, and is never trusted (no command: links from untrusted document text)", () => {
     const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ derivedState: 'open' }), parent, '/x/f.md');
+    assert.ok(node.tooltip instanceof vscode.MarkdownString);
+    assert.notEqual((node.tooltip as vscode.MarkdownString).isTrusted, true);
+  });
+
+  test("a task node's tooltip always leads with its full id and title, the part the sidebar label truncates", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const longTitle = 'All five real documents parse and render without throwing or losing a section';
+    const node = new TaskNode(item({ id: 'AC3', title: longTitle, derivedState: 'open', evidence: '' }), parent, '/x/f.md');
+    assert.match(markdownTooltipValue(node.tooltip), new RegExp(`^AC3 ${longTitle}`));
+  });
+
+  test("an open item with no evidence produces a tooltip that is its full title, never just the bare word \"open\"", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ id: 'T1', title: 'Do the thing', derivedState: 'open', evidence: '' }), parent, '/x/f.md');
+    const value = markdownTooltipValue(node.tooltip);
+    assert.notEqual(value, 'open', 'expected the icon-redundant state word to be dropped entirely');
+    assert.match(value, /T1 Do the thing/);
+  });
+
+  test("a done item with no evidence produces a tooltip that is its full title, never just the bare word \"done\"", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    // evidence non-empty but a commit reference proves it without evidence
+    // text: proven, not unproven, so no unproven sentence is expected.
     const node = new TaskNode(
-      item({ derivedState: 'done', evidence: 'Verified manually against staging.' }),
+      item({ id: 'T1', title: 'Do the thing', derivedState: 'done', evidence: '', commitReference: '4b7c1e9' }),
       parent,
       '/x/f.md',
     );
-    assert.equal(node.tooltip, 'Verified manually against staging.');
+    const value = markdownTooltipValue(node.tooltip);
+    assert.notEqual(value, 'done');
+    assert.match(value, /T1 Do the thing/);
   });
 
-  test("a task node's tooltip falls back to a state description when evidence is empty", () => {
+  test("a declined item with no evidence produces a tooltip that is its full title, never just the bare word \"declined\"", () => {
     const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
-    const node = new TaskNode(item({ derivedState: 'declined', evidence: '' }), parent, '/x/f.md');
-    assert.equal(node.tooltip, 'declined');
+    const node = new TaskNode(item({ id: 'T1', title: 'Do the thing', derivedState: 'declined', evidence: '' }), parent, '/x/f.md');
+    const value = markdownTooltipValue(node.tooltip);
+    assert.notEqual(value, 'declined');
+    assert.match(value, /T1 Do the thing/);
   });
 
-  // --- closed-feature muting (T9) -----------------------------------------
+  test("a task node's tooltip includes its evidence, after the title, when it has any", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(
+      item({ id: 'T1', title: 'Ship it', derivedState: 'done', evidence: 'Verified manually against staging.' }),
+      parent,
+      '/x/f.md',
+    );
+    const value = markdownTooltipValue(node.tooltip);
+    const titleIndex = value.indexOf('T1 Ship it');
+    const evidenceIndex = value.indexOf('Verified manually against staging.');
+    assert.ok(titleIndex >= 0, 'expected the full title in the tooltip');
+    assert.ok(evidenceIndex > titleIndex, 'expected the evidence to follow the title, not precede or replace it');
+  });
+
+  test("a done-unproven task node's tooltip states the shared unproven message, after the title", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ id: 'T1', title: 'Document the signing step', derivedState: 'done-unproven', evidence: '' }), parent, '/x/f.md');
+    const value = markdownTooltipValue(node.tooltip);
+    const titleIndex = value.indexOf('T1 Document the signing step');
+    const messageIndex = value.indexOf('ODD treats a checkbox as no proof at all.');
+    assert.ok(titleIndex >= 0);
+    assert.ok(messageIndex > titleIndex);
+  });
+
+  test("an unknown-marker task node's tooltip states that its marker was not recognized, after the title", () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ id: 'T1', title: 'Mystery item', derivedState: 'unknown', evidence: '' }), parent, '/x/f.md');
+    const value = markdownTooltipValue(node.tooltip);
+    const titleIndex = value.indexOf('T1 Mystery item');
+    const messageIndex = value.indexOf('was not recognized');
+    assert.ok(titleIndex >= 0);
+    assert.ok(messageIndex > titleIndex);
+    assert.notEqual(value, 'unknown state', 'expected a full sentence, not the old bare label');
+  });
+
+  // --- feature-level rollup colouring (T9, extended) -----------------------
 
   test('an open feature node uses the plain checklist icon with no theme colour override', () => {
     const node = new FeatureNode(
@@ -248,7 +393,7 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal((node.iconPath as vscode.ThemeIcon).color, undefined);
   });
 
-  test('a fully-closed feature node renders muted via the disabledForeground theme colour', () => {
+  test('a fully-closed feature node with every item proven renders green with the pass icon', () => {
     const node = new FeatureNode(
       feature({
         progress: { done: 2, total: 2, percentage: 100, doneUnproven: 0 },
@@ -256,10 +401,24 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
       }),
     );
     assert.ok(node.iconPath instanceof vscode.ThemeIcon);
-    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'checklist');
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'pass');
     const color = (node.iconPath as vscode.ThemeIcon).color;
     assert.ok(color instanceof vscode.ThemeColor);
-    assert.equal(color!.id, 'disabledForeground');
+    assert.equal(color!.id, 'testing.iconPassed');
+  });
+
+  test('a fully-closed feature node with an unproven item renders the warning icon and colour, never green', () => {
+    const node = new FeatureNode(
+      feature({
+        progress: { done: 2, total: 2, percentage: 100, doneUnproven: 1 },
+        sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] })],
+      }),
+    );
+    assert.ok(node.iconPath instanceof vscode.ThemeIcon);
+    assert.equal((node.iconPath as vscode.ThemeIcon).id, 'warning');
+    const color = (node.iconPath as vscode.ThemeIcon).color;
+    assert.ok(color instanceof vscode.ThemeColor);
+    assert.equal(color!.id, 'problemsWarningIcon.foreground');
   });
 
   // --- filter (T9) ---------------------------------------------------------
@@ -274,15 +433,25 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(fired, true);
   });
 
-  // --- reveal-on-click (T9) -------------------------------------------------
+  // --- clicking a task both reveals it and opens the detail panel (oddLedger.openTask) ---
 
-  test("a task node's command opens the document and reveals its line, converted from 1-based to 0-based", () => {
-    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+  test("a task node's command runs oddLedger.openTask, passing itself as the sole argument", () => {
+    const featureNode = new FeatureNode(feature());
+    const parent = new SectionNode(section({ items: [] }), featureNode);
     const node = new TaskNode(item({ derivedState: 'open', startLine: 42 }), parent, '/x/f.md');
 
     assert.ok(node.command);
-    assert.equal(node.command!.command, 'vscode.open');
-    const [uri, options] = node.command!.arguments as [vscode.Uri, { selection: vscode.Range }];
+    assert.equal(node.command!.command, 'oddLedger.openTask');
+    assert.deepEqual(node.command!.arguments, [node]);
+  });
+
+  // --- revealTaskArguments: the line-conversion oddLedger.openTask reuses ---
+
+  test('revealTaskArguments points at the task\'s document and its line, converted from 1-based to 0-based', () => {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    const node = new TaskNode(item({ derivedState: 'open', startLine: 42 }), parent, '/x/f.md');
+
+    const [uri, options] = revealTaskArguments(node);
     assert.equal(uri.fsPath, '/x/f.md');
     assert.ok(options.selection instanceof vscode.Range);
     // startLine is 1-based (line 42 in the document); the reveal API is
@@ -291,20 +460,22 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(options.selection.end.line, 41);
   });
 
-  test("a task node's command line conversion holds at the first line of a document (startLine 1 -> line 0)", () => {
+  test('revealTaskArguments line conversion holds at the first line of a document (startLine 1 -> line 0)', () => {
     const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
     const node = new TaskNode(item({ derivedState: 'open', startLine: 1 }), parent, '/x/f.md');
-    const [, options] = node.command!.arguments as [vscode.Uri, { selection: vscode.Range }];
+    const [, options] = revealTaskArguments(node);
     assert.equal(options.selection.start.line, 0);
   });
 
   // --- NextStepNode ------------------------------------------------------
 
-  test('a next-step node labels itself "Next: <line>", is a leaf, and carries the full line as tooltip', () => {
+  test('a next-step node labels itself "Next: <line>", is a leaf, and carries the full line as a MarkdownString tooltip', () => {
     const parent = new FeatureNode(feature());
     const node = new NextStepNode(nextStep({ line: 'Ship the remaining task.' }), parent);
     assert.equal(node.label, 'Next: Ship the remaining task.');
-    assert.equal(node.tooltip, 'Ship the remaining task.');
+    assert.ok(node.tooltip instanceof vscode.MarkdownString);
+    assert.notEqual((node.tooltip as vscode.MarkdownString).isTrusted, true);
+    assert.equal(markdownTooltipValue(node.tooltip), 'Ship the remaining task.');
     assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.None);
     assert.equal(node.contextValue, 'oddLedger.nextStep');
     assert.equal(node.parent, parent);

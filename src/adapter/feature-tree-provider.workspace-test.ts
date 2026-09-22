@@ -58,14 +58,15 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
     assert.equal(zeta!.description, '1/2');
   });
 
-  test('a fully-closed feature renders muted with the disabledForeground theme colour (T9)', () => {
+  test('a fully-closed, fully-proven feature renders green with the pass icon (T9, extended)', () => {
     const provider = new FeatureTreeDataProvider();
     const children = provider.getChildren() as FeatureNode[];
     const alpha = children.find((c) => c.model.featureName === 'alpha-widget-cache');
     assert.ok(alpha);
+    assert.equal((alpha!.iconPath as vscode.ThemeIcon).id, 'pass');
     const color = (alpha!.iconPath as vscode.ThemeIcon).color;
     assert.ok(color instanceof vscode.ThemeColor);
-    assert.equal(color!.id, 'disabledForeground');
+    assert.equal(color!.id, 'testing.iconPassed');
 
     const beta = children.find((c) => c.model.featureName === 'beta-notification-hub');
     assert.ok(beta);
@@ -85,7 +86,8 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
     const children = provider.getChildren() as FeatureNode[];
     const zeta = children.find((c) => c.model.featureName === 'zeta-report-export');
     assert.ok(zeta);
-    assert.match(zeta!.tooltip as string, /no branch recorded/);
+    assert.ok(zeta!.tooltip instanceof vscode.MarkdownString);
+    assert.match((zeta!.tooltip as vscode.MarkdownString).value, /no branch recorded/);
   });
 
   test('a feature with a Next step section shows it as the last child, after every section', () => {

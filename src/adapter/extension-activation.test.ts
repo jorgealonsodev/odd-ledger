@@ -1,10 +1,38 @@
 import * as assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as vscode from 'vscode';
-import { FeatureNode } from './feature-tree-provider';
-import type { FeatureModel } from '../domain/build-feature-model';
+import { FeatureNode, SectionNode, TaskNode } from './feature-tree-provider';
+import type { FeatureModel, ItemModel, SectionModel } from '../domain/build-feature-model';
 import { EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 
 const EMPTY_COUNTS = { done: 0, total: 0, percentage: 0, doneUnproven: 0 };
+
+function item(overrides: Partial<ItemModel> = {}): ItemModel {
+  return {
+    id: 'T1',
+    title: 'Do the thing',
+    derivedState: 'open',
+    commitReference: null,
+    startLine: 1,
+    endLine: 1,
+    evidence: '',
+    ...overrides,
+  };
+}
+
+function section(overrides: Partial<SectionModel> = {}): SectionModel {
+  return {
+    heading: 'Tasks',
+    kind: 'tasks',
+    counts: EMPTY_COUNTS,
+    countsTowardProgress: true,
+    headingLine: 5,
+    items: [item()],
+    ...overrides,
+  };
+}
 
 function webviewTabs(): vscode.Tab[] {
   return vscode.window.tabGroups.all.flatMap((group) => group.tabs).filter((tab) => tab.input instanceof vscode.TabInputWebview);
@@ -96,5 +124,127 @@ suite('Extension activation', () => {
     assert.ok(opened, 'expected a tab titled after the feature name to open');
 
     await vscode.window.tabGroups.close(opened!);
+  });
+
+  // --- oddLedger.openTask: reveal + panel together, from one click ---------
+
+  function writeFixtureFeature(dir: string, featureName: string, lines: string[]): { featureNode: FeatureNode; documentPath: string } {
+    const documentPath = join(dir, `${featureName}.md`);
+    writeFileSync(documentPath, lines.join('\n'), 'utf-8');
+    const featureNode = new FeatureNode({
+      featureName,
+      documentPath,
+      title: null,
+      branch: null,
+      progress: EMPTY_COUNTS,
+      sections: [],
+      nextStep: null,
+      structure: EMPTY_DOCUMENT_STRUCTURE,
+    } satisfies FeatureModel);
+    return { featureNode, documentPath };
+  }
+
+  test('registers the oddLedger.openTask command', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('oddLedger.openTask'), 'oddLedger.openTask was not registered');
+  });
+
+  test('oddLedger.openTask invoked with no argument does nothing observable', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const before = webviewTabs().length;
+    await vscode.commands.executeCommand('oddLedger.openTask');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(webviewTabs().length, before);
+  });
+
+  test('oddLedger.openTask reveals the task\'s own line in its document (1-based to 0-based) and opens its feature panel', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const dir = mkdtempSync(join(tmpdir(), 'odd-ledger-open-task-'));
+    try {
+      const { featureNode, documentPath } = writeFixtureFeature(dir, 'sample-feature', [
+        '# sample-feature',
+        '',
+        '## Tasks',
+        '',
+        '- [ ] T1 First task',
+        '- [ ] T2 Second task',
+      ]);
+      const sectionNode = new SectionNode(section({ items: [item({ startLine: 6 })] }), featureNode);
+      // T2 is on line 6 (1-based) of the fixture above; the reveal API is
+      // 0-based, so the selection this command produces must land on
+      // line 5 — not line 0, not T1's own line.
+      const taskNode = new TaskNode(item({ id: 'T2', startLine: 6 }), sectionNode, documentPath);
+
+      await vscode.commands.executeCommand('oddLedger.openTask', taskNode);
+
+      const editor = vscode.window.activeTextEditor;
+      assert.ok(editor, 'expected a text editor to become active');
+      assert.equal(editor!.document.uri.fsPath, documentPath);
+      assert.equal(editor!.selection.start.line, 5);
+
+      const opened = await waitForWebviewTab('sample-feature');
+      assert.ok(opened, 'expected the feature\'s detail panel to also open');
+
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+      await vscode.window.tabGroups.close(opened!);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('two rapid clicks on tasks in different features leave the panel and the editor describing the same, most recent task', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const dir = mkdtempSync(join(tmpdir(), 'odd-ledger-open-task-race-'));
+    try {
+      const alpha = writeFixtureFeature(dir, 'alpha-feature', ['# alpha-feature', '', '## Tasks', '', '- [ ] T1 Alpha task']);
+      const beta = writeFixtureFeature(dir, 'beta-feature', ['# beta-feature', '', '## Tasks', '', '- [ ] T1 Beta task']);
+      const alphaTask = new TaskNode(
+        item({ id: 'T1', startLine: 5 }),
+        new SectionNode(section({ items: [] }), alpha.featureNode),
+        alpha.documentPath,
+      );
+      const betaTask = new TaskNode(
+        item({ id: 'T1', startLine: 5 }),
+        new SectionNode(section({ items: [] }), beta.featureNode),
+        beta.documentPath,
+      );
+
+      // Fired back to back, deliberately not awaited between them, so the
+      // second click's work can genuinely overlap the first's — exactly
+      // the "two rapid clicks" scenario the race guard (open-task.ts)
+      // exists for.
+      const first = vscode.commands.executeCommand('oddLedger.openTask', alphaTask);
+      const second = vscode.commands.executeCommand('oddLedger.openTask', betaTask);
+      await Promise.all([first, second]);
+
+      const editor = vscode.window.activeTextEditor;
+      assert.ok(editor, 'expected a text editor to become active');
+      assert.equal(editor!.document.uri.fsPath, beta.documentPath, 'expected the editor to show the most recent click\'s document');
+
+      // Exactly one panel tab, titled after the most recent click's
+      // feature: the panel is reused (never a second panel), and a stale
+      // render from the first click must not have won the race.
+      const openTabs = webviewTabs();
+      assert.equal(openTabs.length, 1, 'expected exactly one detail panel tab, reused rather than duplicated');
+      assert.equal(openTabs[0].label, 'beta-feature', 'expected the panel to describe the same feature the editor now shows');
+
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+      await vscode.window.tabGroups.close(openTabs[0]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

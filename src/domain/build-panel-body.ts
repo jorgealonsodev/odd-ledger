@@ -19,7 +19,7 @@
  * src/domain/.
  */
 
-import type { FeatureModel, SectionModel } from './build-feature-model';
+import type { FeatureModel, ItemModel, SectionModel } from './build-feature-model';
 import type { DocumentSection, SectionKind } from './parse-document-structure';
 
 /**
@@ -61,6 +61,14 @@ export interface PanelBody {
    * shows it) — in document order, and only when the section is present
    * with a non-empty body. */
   readonly otherSections: readonly PanelBodyDocumentSection[];
+  /** The one task a caller asked to focus (a task node's own click, never
+   * a feature node's or a watcher-driven refresh's), found by matching
+   * `focusedTaskStartLine` against an item's own `startLine` — the same
+   * identity TaskNode already reveals-on-click with. `null` when no
+   * `focusedTaskStartLine` was given, or when it names no item in this
+   * document: absence here means the focused-task region renders nothing
+   * at all, never a blank placeholder. */
+  readonly focusedTask: ItemModel | null;
 }
 
 const OBJECTIVE_REGION_KINDS: readonly SectionKind[] = ['objective', 'problem'];
@@ -136,17 +144,37 @@ function buildOtherSections(
     .map((section) => ({ heading: section.heading, body: section.body }));
 }
 
+/** Finds the item whose `startLine` matches `focusedTaskStartLine` across
+ * every task section, or `null` when no start line was given or none
+ * matches — see PanelBody.focusedTask. */
+function findFocusedTask(taskSections: readonly SectionModel[], focusedTaskStartLine: number | undefined): ItemModel | null {
+  if (focusedTaskStartLine === undefined) {
+    return null;
+  }
+  for (const section of taskSections) {
+    const found = section.items.find((item) => item.startLine === focusedTaskStartLine);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
 /**
  * Composes the detail panel's body regions from an already-built
  * FeatureModel. See PanelBody for what each region contains and when it
- * is omitted.
+ * is omitted. `focusedTaskStartLine` is the seam a task node's own click
+ * fills (extension.ts's oddLedger.openFeature, via runOpenFeatureFetch);
+ * left `undefined` by a feature node's click and by a watcher-driven
+ * refresh, so those two paths render with no focused task at all.
  */
-export function buildPanelBody(model: FeatureModel): PanelBody {
+export function buildPanelBody(model: FeatureModel, focusedTaskStartLine?: number): PanelBody {
   const { sections } = model.structure;
   const claimed = claimedHeadingLines(model.sections);
   return {
     objective: buildObjective(sections, claimed),
     taskSections: model.sections,
     otherSections: buildOtherSections(sections, claimed),
+    focusedTask: findFocusedTask(model.sections, focusedTaskStartLine),
   };
 }

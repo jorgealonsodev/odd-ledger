@@ -32,6 +32,7 @@ import type { FeatureHistory, HistoryPoint } from '../domain/build-history';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
+import { STATE_COLOR_TOKEN, themeColorCssVar } from '../domain/state-colors';
 
 const VIEW_TYPE = 'oddLedger.featureDetail';
 const VIEW_TITLE_FALLBACK = 'ODD Ledger';
@@ -133,6 +134,24 @@ const CODICON_GLYPH: Record<string, string> = {
   question: '\\eb32',
 };
 
+/**
+ * The CSS colour rule for each state's codicon glyph class, generated from
+ * STATE_COLOR_TOKEN and STATE_CODICON so this panel and the tree (which
+ * colours the very same states via vscode.ThemeColor, reading the same
+ * STATE_COLOR_TOKEN map) never carry two copies of this mapping. A state
+ * with no token (`open`) gets no rule at all, so its glyph inherits the
+ * default foreground rather than being pinned to a colour.
+ */
+function renderCodiconColorRules(): string {
+  return (Object.keys(STATE_CODICON) as DerivedItemState[])
+    .map((state) => {
+      const token = STATE_COLOR_TOKEN[state];
+      return token ? `.codicon-${STATE_CODICON[state]} { color: ${themeColorCssVar(token)}; }` : '';
+    })
+    .filter((rule) => rule.length > 0)
+    .join('\n  ');
+}
+
 function formatTaskLine(item: ItemModel): string {
   return item.id ? `${item.id}  ${item.title}` : item.title;
 }
@@ -154,17 +173,26 @@ function renderTaskEvidence(item: ItemModel): string {
   return '';
 }
 
-function renderTaskItem(item: ItemModel): string {
+/** Renders one task item. `focusedStartLine` is the currently focused
+ * task's own startLine (or `null` when nothing is focused): when it
+ * matches `item.startLine`, this item's wrapper carries the additional
+ * `task-item-focused` class and nothing else changes — marking the
+ * already-rendered task, per PRD, is "a class and a style, not a
+ * duplicate rendering decision". Shared verbatim by the focused-task
+ * region above the objective (see renderFocusedTaskRegion) and by this
+ * item's own place in its section list, so the two never drift apart. */
+function renderTaskItem(item: ItemModel, focusedStartLine: number | null): string {
   const codiconName = STATE_CODICON[item.derivedState];
+  const focusedClass = item.startLine === focusedStartLine ? ' task-item-focused' : '';
   return `
-      <div class="task-item task-item-${item.derivedState}">
+      <div class="task-item task-item-${item.derivedState}${focusedClass}">
         <div class="task-title"><span class="task-glyph codicon codicon-${codiconName}" aria-hidden="true"></span> ${escapeHtml(formatTaskLine(item))}</div>
         ${renderTaskEvidence(item)}
       </div>`;
 }
 
-function renderTaskSection(section: SectionModel): string {
-  const items = section.items.map(renderTaskItem).join('');
+function renderTaskSection(section: SectionModel, focusedStartLine: number | null): string {
+  const items = section.items.map((item) => renderTaskItem(item, focusedStartLine)).join('');
   return `
     <h2>${escapeHtml(section.heading)}</h2>
     <div class="task-list">${items}</div>`;
@@ -174,7 +202,37 @@ function renderTaskSection(section: SectionModel): string {
  * found to hold at least one checklist item, with its items and their
  * evidence, in the same order the tree view renders them. */
 function renderTaskSections(body: PanelBody): string {
-  return body.taskSections.map(renderTaskSection).join('');
+  const focusedStartLine = body.focusedTask?.startLine ?? null;
+  return body.taskSections.map((section) => renderTaskSection(section, focusedStartLine)).join('');
+}
+
+/**
+ * The focused-task region (T-focused-task): a distinct block near the top
+ * of the body, above the objective, showing the one task a task node's own
+ * click named in full — its state, its id as written, its title, its
+ * evidence (or the shared unproven statement), and its commit reference
+ * when it has one. Reuses renderTaskItem for the state/title/evidence
+ * markup rather than re-deriving it, so the two renderings of the same
+ * task never disagree.
+ *
+ * Renders nothing at all when `body.focusedTask` is `null` — a feature
+ * node's own click and a watcher-driven refresh both carry no focused
+ * task, and per this feature's absence convention that means the region
+ * does not exist, never a blank placeholder.
+ */
+function renderFocusedTaskRegion(focusedTask: ItemModel | null): string {
+  if (!focusedTask) {
+    return '';
+  }
+  const commit = focusedTask.commitReference
+    ? `<div class="focused-task-commit">Commit: ${escapeHtml(focusedTask.commitReference)}</div>`
+    : '';
+  return `
+    <div class="focused-task">
+      <div class="focused-task-label">→ FOCUSED TASK</div>
+      ${renderTaskItem(focusedTask, focusedTask.startLine)}
+      ${commit}
+    </div>`;
 }
 
 function renderOtherSection(section: PanelBodyDocumentSection): string {
@@ -193,7 +251,7 @@ function renderOtherSections(body: PanelBody): string {
 }
 
 function renderPanelBody(body: PanelBody): string {
-  return `${renderObjective(body)}${renderTaskSections(body)}${renderOtherSections(body)}`;
+  return `${renderFocusedTaskRegion(body.focusedTask)}${renderObjective(body)}${renderTaskSections(body)}${renderOtherSections(body)}`;
 }
 
 /**
@@ -446,6 +504,7 @@ function renderHtml(
   .codicon-warning::before { content: '${CODICON_GLYPH.warning}'; }
   .codicon-circle-slash::before { content: '${CODICON_GLYPH['circle-slash']}'; }
   .codicon-question::before { content: '${CODICON_GLYPH.question}'; }
+  ${renderCodiconColorRules()}
   body {
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size);
@@ -504,6 +563,24 @@ function renderHtml(
   body.vscode-high-contrast .next-step {
     border-width: 2px;
   }
+  .focused-task {
+    border: 1px solid var(--vscode-focusBorder);
+    background-color: var(--vscode-editor-inactiveSelectionBackground);
+    padding: 8px 12px;
+    margin: 16px 0;
+  }
+  .focused-task-label {
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .focused-task-commit {
+    margin-top: 4px;
+    color: var(--vscode-descriptionForeground);
+  }
+  body.vscode-high-contrast .focused-task {
+    border-width: 2px;
+  }
   h2 {
     font-size: 1em;
     margin: 20px 0 8px;
@@ -523,6 +600,10 @@ function renderHtml(
   .task-item {
     border-left: 2px solid var(--vscode-panel-border);
     padding: 2px 8px;
+  }
+  .task-item-focused {
+    border-left-color: var(--vscode-focusBorder);
+    background-color: var(--vscode-editor-inactiveSelectionBackground);
   }
   .task-glyph {
     display: inline-block;
@@ -663,28 +744,44 @@ export class FeatureDetailPanel implements vscode.Disposable {
    * extension.ts is what actually runs git (fetchDocumentRevisions) and
    * derives both from the result before calling show().
    */
+  /**
+   * `preserveFocus` defaults to `false`, unchanged from this method's
+   * original behaviour: a feature node's own click (extension.ts's
+   * oddLedger.openFeature) and a watcher-driven refresh both still let
+   * the panel take focus as before. oddLedger.openTask (adapter/
+   * open-task.ts) is the one caller that passes `true`, because that
+   * click also reveals a document and must leave keyboard focus on the
+   * tree for it to still be usable afterwards.
+   */
   show(
     model: FeatureModel,
     workspaceRoot: string,
     lastWork: string | null = null,
     history: FeatureHistory = UNAVAILABLE_HISTORY,
+    focusedTaskStartLine?: number,
+    preserveFocus = false,
   ): void {
     const header = buildPanelHeader(model, workspaceRoot, lastWork);
-    const body = buildPanelBody(model);
+    const body = buildPanelBody(model, focusedTaskStartLine);
     const recordedFields = buildRecordedFields(model);
     this.currentDocumentPath = model.documentPath;
 
     if (this.panel) {
       this.panel.title = header.title || VIEW_TITLE_FALLBACK;
       this.panel.webview.html = renderHtml(header, body, recordedFields, history, this.panel.webview, this.extensionUri);
-      this.panel.reveal();
+      this.panel.reveal(undefined, preserveFocus);
       return;
     }
 
     this.panel = vscode.window.createWebviewPanel(
       VIEW_TYPE,
       header.title || VIEW_TITLE_FALLBACK,
-      vscode.ViewColumn.One,
+      // Beside, not One: a task click (oddLedger.openTask) also opens its
+      // document in the main editor column (ViewColumn.One), and both
+      // competing for that same column would rearrange the editor on
+      // every click. Kept the same for a feature click too, so the panel
+      // never has two different column strategies to reason about.
+      { viewColumn: vscode.ViewColumn.Beside, preserveFocus },
       {
         // No scripts: a static header/tiles/body render has nothing to
         // script, so enableScripts stays off entirely rather than

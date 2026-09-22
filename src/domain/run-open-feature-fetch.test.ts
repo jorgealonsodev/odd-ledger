@@ -9,11 +9,14 @@ const slimModel = (featureName: string): FeatureModel => ({ featureName, documen
 
 function fakePanel(): {
   panel: OpenFeaturePanel;
-  calls: Array<{ history: unknown }>;
+  calls: Array<{ history: unknown; focusedTaskStartLine: number | undefined; preserveFocus: boolean | undefined }>;
 } {
-  const calls: Array<{ history: unknown }> = [];
+  const calls: Array<{ history: unknown; focusedTaskStartLine: number | undefined; preserveFocus: boolean | undefined }> = [];
   return {
-    panel: { show: (_m, _r, _l, history) => calls.push({ history }) },
+    panel: {
+      show: (_m, _r, _l, history, focusedTaskStartLine, preserveFocus) =>
+        calls.push({ history, focusedTaskStartLine, preserveFocus }),
+    },
     calls,
   };
 }
@@ -46,4 +49,40 @@ test('awaits the bounded git read before rendering anything', async () => {
   resolveFetch(NO_REVISIONS);
   await done;
   assert.equal(calls.length, 1, 'expected exactly one render once the fetch resolved');
+});
+
+test('passes focusedTaskStartLine through to the panel when given', async () => {
+  const { panel, calls } = fakePanel();
+  const fetch = async () => NO_REVISIONS;
+
+  await runOpenFeatureFetch(slimModel('sample'), '/workspace', panel, fetch, 42);
+
+  assert.equal(calls[0].focusedTaskStartLine, 42);
+});
+
+test('leaves focusedTaskStartLine undefined when the caller gives none (a feature node\'s own click, or a watcher refresh)', async () => {
+  const { panel, calls } = fakePanel();
+  const fetch = async () => NO_REVISIONS;
+
+  await runOpenFeatureFetch(slimModel('sample'), '/workspace', panel, fetch);
+
+  assert.equal(calls[0].focusedTaskStartLine, undefined);
+});
+
+test('passes preserveFocus through to the panel when given', async () => {
+  const { panel, calls } = fakePanel();
+  const fetch = async () => NO_REVISIONS;
+
+  await runOpenFeatureFetch(slimModel('sample'), '/workspace', panel, fetch, 42, true);
+
+  assert.equal(calls[0].preserveFocus, true);
+});
+
+test('leaves preserveFocus undefined when the caller gives none', async () => {
+  const { panel, calls } = fakePanel();
+  const fetch = async () => NO_REVISIONS;
+
+  await runOpenFeatureFetch(slimModel('sample'), '/workspace', panel, fetch);
+
+  assert.equal(calls[0].preserveFocus, undefined);
 });

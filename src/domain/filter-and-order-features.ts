@@ -40,17 +40,70 @@ export type LedgerFilter = 'all' | 'open' | 'unproven';
  * is what keeps them from drifting apart again — a feature the tree calls
  * finished is now exactly a feature `Open` has nothing left to show.
  */
-export function isFeatureClosed(model: FeatureModel): boolean {
+/** The shared "closed" primitive isFeatureClosed and isSectionClosed both
+ * delegate to, so there is exactly one definition of what "closed" means
+ * — one item list read with the Open filter's own admission rule — rather
+ * than a second one written per level. */
+function isClosed(items: readonly ItemModel[]): boolean {
   let total = 0;
-  for (const section of model.sections) {
-    for (const item of section.items) {
-      total += 1;
-      if (admits('open', item.derivedState)) {
-        return false;
-      }
+  for (const item of items) {
+    total += 1;
+    if (admits('open', item.derivedState)) {
+      return false;
     }
   }
   return total > 0;
+}
+
+export function isFeatureClosed(model: FeatureModel): boolean {
+  return isClosed(model.sections.flatMap((section) => section.items));
+}
+
+/** The section-level sibling of isFeatureClosed: true when every item in
+ * `section` is closed (done, including done-unproven) by the same
+ * admission rule, false for a section with zero items — there is no
+ * measured progress to close, same as isFeatureClosed's own zero-item
+ * case. */
+export function isSectionClosed(section: SectionModel): boolean {
+  return isClosed(section.items);
+}
+
+/**
+ * The three-way summary a group of items rolls up to, for the tree's and
+ * detail panel's icon colouring (see src/domain/state-colors.ts):
+ *
+ *  - `'proven'`   every item is closed and none of them is done-unproven —
+ *                 the group is genuinely finished.
+ *  - `'unproven'` every item is closed, but at least one is done-unproven.
+ *                 A checked box with no evidence and no commit is not
+ *                 proof — that gap is the reason this product exists — so
+ *                 a group that hides one behind an otherwise-green summary
+ *                 would repeat exactly the lie the checkbox itself tells.
+ *                 This must never resolve to `'proven'`.
+ *  - `'open'`     at least one item is still open, declined, or unknown
+ *                 (the same admission rule isFeatureClosed and the Open
+ *                 filter already use), so there is still work left and the
+ *                 group stays neutral.
+ */
+export type RollupState = 'proven' | 'unproven' | 'open';
+
+function rollupState(items: readonly ItemModel[], closed: boolean): RollupState {
+  if (!closed) {
+    return 'open';
+  }
+  return items.some((item) => item.derivedState === 'done-unproven') ? 'unproven' : 'proven';
+}
+
+/** Rolls up one section's items into the three-way summary state. */
+export function deriveSectionRollupState(section: SectionModel): RollupState {
+  return rollupState(section.items, isSectionClosed(section));
+}
+
+/** Rolls up an entire feature's items into the same three-way summary,
+ * reusing isFeatureClosed rather than re-deriving what "closed" means at
+ * this level. */
+export function deriveFeatureRollupState(model: FeatureModel): RollupState {
+  return rollupState(model.sections.flatMap((section) => section.items), isFeatureClosed(model));
 }
 
 /**

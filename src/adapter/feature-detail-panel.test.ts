@@ -4,7 +4,7 @@ import { FeatureDetailPanel } from './feature-detail-panel';
 import type { FeatureModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
-import { HISTORY_CHART_CAPTION } from '../domain/build-history';
+import { HISTORY_CHART_CAPTION, UNAVAILABLE_HISTORY } from '../domain/build-history';
 import type { FeatureHistory } from '../domain/build-history';
 
 /**
@@ -357,6 +357,105 @@ suite('FeatureDetailPanel', () => {
     assert.ok(html.includes(UNPROVEN_TASK_MESSAGE));
   });
 
+  // --- focused task region --------------------------------------------------
+
+  function focusedRegion(html: string): string {
+    const match = /<div class="focused-task">[\s\S]*?<\/div>\s*<\/div>/.exec(html);
+    return match ? match[0] : '';
+  }
+
+  test('renders the focused region for the clicked task, and not a different one, above the objective', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Objective',
+      '',
+      'Ship it.',
+      '',
+      '## Tasks',
+      '',
+      '- [ ] T1 First task',
+      '- [ ] T2 Second task',
+    ].join('\n');
+    const built = modelFromText('sample', text);
+    const secondTask = built.sections[0].items[1];
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(built, '/workspace', null, UNAVAILABLE_HISTORY, secondTask.startLine);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const region = focusedRegion(html);
+    assert.notEqual(region, '', 'expected a focused-task region to render');
+    assert.ok(region.includes('Second task'), 'expected the focused region to show the clicked task');
+    assert.ok(!region.includes('First task'), 'expected the focused region to show only the clicked task, not the other one');
+    // Above the objective: the focused region's own marker must appear
+    // before the Objective heading in the rendered document order.
+    assert.ok(html.indexOf('class="focused-task"') < html.indexOf('<h2>Objective</h2>'));
+  });
+
+  test('the same task is marked focused in its section further down, and only that one', () => {
+    const text = ['# sample', '', '## Tasks', '', '- [ ] T1 First task', '- [ ] T2 Second task'].join('\n');
+    const built = modelFromText('sample', text);
+    const secondTask = built.sections[0].items[1];
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(built, '/workspace', null, UNAVAILABLE_HISTORY, secondTask.startLine);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    // Both the focused region and the Tasks section render Second task's
+    // own wrapper with the focused class, so every such wrapper must
+    // carry Second task's text — none of them may carry First task's.
+    // `.` (not `[^]`) deliberately cannot cross this template's own line
+    // breaks between elements, so the match cannot wander into a sibling
+    // task-item's div the way an unbounded wildcard could.
+    const focusedWrappers = [...html.matchAll(/<div class="task-item task-item-open task-item-focused">\s*<div class="task-title">.*?<\/div>/g)];
+    assert.ok(focusedWrappers.length > 0, 'expected at least one focused task-item wrapper to render');
+    for (const [wrapper] of focusedWrappers) {
+      assert.ok(wrapper.includes('Second task'), `expected every focused wrapper to show Second task, got: ${wrapper}`);
+      assert.ok(!wrapper.includes('First task'), `expected no focused wrapper to show First task, got: ${wrapper}`);
+    }
+    // And First task's own (unfocused) wrapper must exist, proving the
+    // absence above is not just "First task never rendered at all".
+    assert.match(html, /<div class="task-item task-item-open">\s*<div class="task-title">.*?First task<\/div>/);
+  });
+
+  test('renders no focused-task region at all when no focusedTaskStartLine is given (a feature node\'s own click, or a watcher refresh)', () => {
+    const text = ['# sample', '', '## Tasks', '', '- [ ] T1 First task'].join('\n');
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    assert.ok(!html.includes('class="focused-task"'));
+    // Anchored to the class actually applied to an element's `class="..."`
+    // attribute, not a bare substring: the stylesheet's own
+    // `.task-item-focused { ... }` rule legitimately contains this text
+    // regardless of whether any element uses the class, so a bare
+    // substring check would never be able to fail this assertion.
+    assert.ok(!/class="task-item[^"]*\btask-item-focused\b/.test(html));
+  });
+
+  test('an unproven focused task states what is missing, using the shared constant', () => {
+    const text = ['# sample', '', '## Tasks', '', '- [x] T1 Document the signing step'].join('\n');
+    const built = modelFromText('sample', text);
+    const task = built.sections[0].items[0];
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(built, '/workspace', null, UNAVAILABLE_HISTORY, task.startLine);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const region = focusedRegion(html);
+    assert.ok(region.includes(UNPROVEN_TASK_MESSAGE), 'expected the focused region to state the unproven message');
+  });
+
+  test('the focused task shows its commit reference when it has one', () => {
+    const text = ['# sample', '', '## Tasks', '', '- [x] T1 Ship it', '      DONE `4b7c1e9`'].join('\n');
+    const built = modelFromText('sample', text);
+    const task = built.sections[0].items[0];
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(built, '/workspace', null, UNAVAILABLE_HISTORY, task.startLine);
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    const region = focusedRegion(html);
+    assert.ok(region.includes('4b7c1e9'), 'expected the focused region to show the commit reference');
+  });
+
   test('renders the document\'s other recognized sections when present, escaped and unrendered as Markdown', () => {
     const text = [
       '# sample',
@@ -624,6 +723,23 @@ suite('FeatureDetailPanel', () => {
       html,
       /<div class="task-item task-item-unknown">\s*<div class="task-title"><span class="task-glyph codicon codicon-question" aria-hidden="true"><\/span> T5 {2}Odd marker item<\/div>/,
     );
+  });
+
+  test('colours each state\'s codicon to the same theme token the tree uses, and leaves "open" uncoloured', () => {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(model(), '/home/dev/checkout-service');
+
+    const html = panel.webviewPanel?.webview.html ?? '';
+    // Anchored to the exact colour rule for each glyph's own class, not a
+    // loose substring: this fails if a state lost its colour or a
+    // different state's token leaked onto the wrong glyph.
+    assert.match(html, /\.codicon-pass\s*\{\s*color:\s*var\(--vscode-testing-iconPassed\);\s*\}/);
+    assert.match(html, /\.codicon-warning\s*\{\s*color:\s*var\(--vscode-problemsWarningIcon-foreground\);\s*\}/);
+    assert.match(html, /\.codicon-circle-slash\s*\{\s*color:\s*var\(--vscode-disabledForeground\);\s*\}/);
+    assert.match(html, /\.codicon-question\s*\{\s*color:\s*var\(--vscode-problemsErrorIcon-foreground\);\s*\}/);
+    // "open" carries no colour rule at all: it inherits the default
+    // foreground rather than being styled to a token.
+    assert.ok(!/\.codicon-circle-large-outline\s*\{\s*color:/.test(html));
   });
 
   test('loads the codicon font from this webview\'s own local-resource origin and grants it in the policy', () => {

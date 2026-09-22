@@ -16,11 +16,19 @@ import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
+import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
 import type { ChecklistCounts, DerivedItemState } from '../domain/derive-checklist-state';
+import { prepareEvidenceMarkdown } from '../domain/prepare-evidence-markdown';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
-import { compareFeatures, filterFeature, isFeatureClosed } from '../domain/filter-and-order-features';
-import type { LedgerFilter } from '../domain/filter-and-order-features';
+import {
+  compareFeatures,
+  deriveFeatureRollupState,
+  deriveSectionRollupState,
+  filterFeature,
+} from '../domain/filter-and-order-features';
+import type { LedgerFilter, RollupState } from '../domain/filter-and-order-features';
+import { ROLLUP_COLOR_TOKEN, ROLLUP_ICON_ID, STATE_COLOR_TOKEN } from '../domain/state-colors';
 
 /** Counts reported when a document cannot be read or parsed: the same
  * "nothing found" shape production code already understands, rather than
@@ -64,14 +72,53 @@ function formatFeatureDescription(model: FeatureModel): string {
   return description;
 }
 
-function formatFeatureTooltip(model: FeatureModel): string {
+/**
+ * A feature node's tooltip: the full feature name (never truncated the
+ * way the sidebar label can be) followed by what this node adds beyond
+ * its own label — done/total, branch, and the unproven count. `appendText`
+ * escapes the feature name and the branch name, both document-controlled
+ * identifiers this extension does not author, before they reach a
+ * MarkdownString; the connective wording is this extension's own and has
+ * no Markdown-special characters, so it is appended directly.
+ * `isTrusted` is left off (default false): a `command:` link in a
+ * MarkdownString reaches this only if a caller opts in, and no tooltip in
+ * this tree ever does.
+ */
+function formatFeatureTooltip(model: FeatureModel): vscode.MarkdownString {
   const counts = model.progress;
-  const branchText = model.branch ? `branch ${model.branch}` : 'no branch recorded';
-  let tooltip = `${model.featureName} — ${counts.done}/${counts.total} tasks done, ${branchText}`;
-  if (counts.doneUnproven > 0) {
-    tooltip += `, ${counts.doneUnproven} unproven`;
+  const markdown = new vscode.MarkdownString();
+  markdown.appendText(model.featureName);
+  markdown.appendMarkdown(` — ${counts.done}/${counts.total} tasks done, `);
+  if (model.branch) {
+    markdown.appendMarkdown('branch ');
+    markdown.appendText(model.branch);
+  } else {
+    markdown.appendMarkdown('no branch recorded');
   }
-  return tooltip;
+  if (counts.doneUnproven > 0) {
+    markdown.appendMarkdown(`, ${counts.doneUnproven} unproven`);
+  }
+  markdown.isTrusted = false;
+  return markdown;
+}
+
+/**
+ * The theme icon a section or feature node renders once its own rollup
+ * state (deriveSectionRollupState/deriveFeatureRollupState) is known: the
+ * matching task-state glyph and colour once every item underneath is
+ * closed (see ROLLUP_ICON_ID/ROLLUP_COLOR_TOKEN in state-colors.ts), or
+ * `fallbackIconId` with no colour override while anything is still open —
+ * the same "closed reads with the checklist's own vocabulary, open stays
+ * neutral" rule for both node kinds, so this is written once and shared
+ * rather than duplicated per class.
+ */
+function rollupThemeIcon(rollup: RollupState, fallbackIconId: string): vscode.ThemeIcon {
+  const iconId = ROLLUP_ICON_ID[rollup];
+  const colorToken = ROLLUP_COLOR_TOKEN[rollup];
+  if (iconId && colorToken) {
+    return new vscode.ThemeIcon(iconId, new vscode.ThemeColor(colorToken));
+  }
+  return new vscode.ThemeIcon(fallbackIconId);
 }
 
 /**
@@ -91,12 +138,12 @@ export class FeatureNode extends vscode.TreeItem {
     super(model.featureName, vscode.TreeItemCollapsibleState.Expanded);
     this.description = formatFeatureDescription(model);
     this.tooltip = formatFeatureTooltip(model);
-    // A feature whose tasks are all closed renders muted (PRD: "as close to
-    // archived as ODD gets, and it is derived, not stored") via the theme's
-    // own disabled-foreground colour, never a hardcoded one.
-    this.iconPath = isFeatureClosed(model)
-      ? new vscode.ThemeIcon('checklist', new vscode.ThemeColor('disabledForeground'))
-      : new vscode.ThemeIcon('checklist');
+    // A feature whose items are all closed and all proven reads green,
+    // the same "pass" glyph its leaves earned; closed but hiding a
+    // done-unproven item reads the warning glyph and colour instead, never
+    // green — see deriveFeatureRollupState's own reasoning for why. An
+    // open feature keeps the plain checklist icon with no colour override.
+    this.iconPath = rollupThemeIcon(deriveFeatureRollupState(model), 'checklist');
     this.contextValue = 'oddLedger.feature';
     // Clicking a feature opens the detail panel (PRD). Passing `this`
     // works even though the constructor is still running: the command
@@ -108,6 +155,20 @@ export class FeatureNode extends vscode.TreeItem {
       arguments: [this],
     };
   }
+}
+
+/**
+ * A section node's tooltip: its full heading as written (`appendText`,
+ * escaped — a document-authored heading, not this extension's own prose)
+ * followed by its own done/total, the same reasoning as
+ * formatFeatureTooltip above, one level down.
+ */
+function formatSectionTooltip(model: SectionModel): vscode.MarkdownString {
+  const markdown = new vscode.MarkdownString();
+  markdown.appendText(model.heading);
+  markdown.appendMarkdown(`\n\n${model.counts.done}/${model.counts.total} tasks done`);
+  markdown.isTrusted = false;
+  return markdown;
 }
 
 /**
@@ -124,7 +185,13 @@ export class SectionNode extends vscode.TreeItem {
   ) {
     super(model.heading, vscode.TreeItemCollapsibleState.Expanded);
     this.description = `${model.counts.done}/${model.counts.total}`;
-    this.iconPath = new vscode.ThemeIcon('list-unordered');
+    this.tooltip = formatSectionTooltip(model);
+    // Same rollup rule as FeatureNode, one level down: a section whose
+    // items are all closed and all proven reads green with the pass
+    // glyph; closed but hiding a done-unproven item reads the warning
+    // glyph and colour instead, never green; anything still open keeps
+    // the generic list glyph with no colour override.
+    this.iconPath = rollupThemeIcon(deriveSectionRollupState(model), 'list-unordered');
     this.contextValue = 'oddLedger.section';
   }
 }
@@ -137,15 +204,12 @@ const STATE_ICON_ID: Record<DerivedItemState, string> = {
   unknown: 'question',
 };
 
-/** A short, human-readable description of a derived state, used as a
- * task's tooltip only when it records no evidence text of its own. */
-const STATE_TOOLTIP_TEXT: Record<DerivedItemState, string> = {
-  open: 'open',
-  done: 'done',
-  'done-unproven': 'checked, no evidence recorded',
-  declined: 'declined',
-  unknown: 'unknown state',
-};
+/** The sentence a task with an unrecognized checkbox marker states in its
+ * tooltip (see formatTaskTooltip) — the one bare-state case still worth
+ * naming. Every other state (open, done, declined) is dropped from the
+ * tooltip entirely: the icon already shows it, and repeating it as a
+ * single word would crowd out what the tooltip could not otherwise show. */
+const UNKNOWN_MARKER_MESSAGE = "This item's checkbox marker was not recognized, so its state could not be determined.";
 
 function formatTaskLabel(model: ItemModel): string {
   return model.id ? `${model.id} ${model.title}` : model.title;
@@ -161,8 +225,59 @@ function formatTaskDescription(model: ItemModel): string | undefined {
   return model.commitReference ?? undefined;
 }
 
-function formatTaskTooltip(model: ItemModel): string {
-  return model.evidence.trim().length > 0 ? model.evidence : STATE_TOOLTIP_TEXT[model.derivedState];
+/**
+ * A task's tooltip, composed in a fixed order: its full text always (the
+ * part the tree's own truncated label had to cut, so it is the part a
+ * tooltip exists to restore — this alone earns a tooltip's place on an
+ * item with nothing else to say); its evidence, when it recorded any,
+ * rendered as Markdown so a commit hash in backticks or bold prose reads
+ * the way it does in the document; then, only when it applies, one
+ * sentence naming what the icon alone cannot show — the shared unproven
+ * statement for a done-unproven item, or UNKNOWN_MARKER_MESSAGE for an
+ * unrecognized marker. open, done and declined add nothing here: the icon
+ * already says exactly that, and a bare state word would only repeat it.
+ *
+ * `appendText` escapes the item's own id/title (a label this extension
+ * derives, not free document prose); `appendMarkdown` is used for the
+ * evidence block, which is exactly the free-form prose this conversion
+ * exists to render as Markdown. `isTrusted` is left off (default false):
+ * evidence comes from a Markdown file this extension does not control,
+ * and an untrusted MarkdownString cannot carry a `command:` link.
+ */
+function formatTaskTooltip(model: ItemModel): vscode.MarkdownString {
+  const markdown = new vscode.MarkdownString();
+  markdown.appendText(formatTaskLabel(model));
+
+  if (model.evidence.trim().length > 0) {
+    markdown.appendMarkdown('\n\n');
+    // Dedented and rejoined first (prepareEvidenceMarkdown): the raw
+    // source carries this document's own checklist-continuation indent
+    // and hard wrap, neither of which Markdown should be handed as-is —
+    // see that function's own doc comment for why.
+    markdown.appendMarkdown(prepareEvidenceMarkdown(model.evidence));
+  }
+
+  if (model.derivedState === 'done-unproven') {
+    markdown.appendMarkdown('\n\n');
+    markdown.appendText(UNPROVEN_TASK_MESSAGE);
+  } else if (model.derivedState === 'unknown') {
+    markdown.appendMarkdown('\n\n');
+    markdown.appendText(UNKNOWN_MARKER_MESSAGE);
+  }
+
+  markdown.isTrusted = false;
+  return markdown;
+}
+
+/** The task-state theme icon: STATE_ICON_ID's glyph, coloured per
+ * STATE_COLOR_TOKEN when that state carries a colour, so the tree and the
+ * detail panel (which reads the same STATE_COLOR_TOKEN map) always agree
+ * on what a state looks like. */
+function taskThemeIcon(state: DerivedItemState): vscode.ThemeIcon {
+  const colorToken = STATE_COLOR_TOKEN[state];
+  return colorToken
+    ? new vscode.ThemeIcon(STATE_ICON_ID[state], new vscode.ThemeColor(colorToken))
+    : new vscode.ThemeIcon(STATE_ICON_ID[state]);
 }
 
 /**
@@ -184,20 +299,34 @@ export class TaskNode extends vscode.TreeItem {
     super(formatTaskLabel(model), vscode.TreeItemCollapsibleState.None);
     this.documentPath = documentPath;
     this.startLine = model.startLine;
-    this.iconPath = new vscode.ThemeIcon(STATE_ICON_ID[model.derivedState]);
+    this.iconPath = taskThemeIcon(model.derivedState);
     this.description = formatTaskDescription(model);
     this.tooltip = formatTaskTooltip(model);
     this.contextValue = 'oddLedger.task';
-    // Clicking a task reveals it in the Markdown at its line (PRD). The
-    // model's line numbers are 1-based (as written in the document); the
-    // Range/Position API is 0-based, so the conversion happens once, here.
-    const line = model.startLine - 1;
+    // Clicking a task both reveals it in the Markdown at its line and
+    // opens the detail panel for its feature, focused on this task (PRD).
+    // A TreeItem carries only one command, so both actions run through
+    // oddLedger.openTask (adapter/open-task.ts), which reads the node's
+    // own documentPath/startLine and its parent chain up to the feature.
     this.command = {
-      command: 'vscode.open',
-      title: 'Open',
-      arguments: [vscode.Uri.file(documentPath), { selection: new vscode.Range(line, 0, line, 0) }],
+      command: 'oddLedger.openTask',
+      title: 'Open Task',
+      arguments: [this],
     };
   }
+}
+
+/**
+ * The `vscode.open`-shaped arguments that reveal `node`'s task at its
+ * line in the Markdown source: the document's own file, and a zero-width
+ * selection on its line. `startLine` is 1-based (as written in the
+ * document); the Range/Position API is 0-based, so the conversion happens
+ * once, here. Used by oddLedger.openTask (adapter/open-task.ts) to build
+ * the options it passes to `vscode.window.showTextDocument`.
+ */
+export function revealTaskArguments(node: TaskNode): [vscode.Uri, { selection: vscode.Range }] {
+  const line = node.startLine - 1;
+  return [vscode.Uri.file(node.documentPath), { selection: new vscode.Range(line, 0, line, 0) }];
 }
 
 /**
@@ -213,7 +342,14 @@ export class NextStepNode extends vscode.TreeItem {
   ) {
     super(`Next: ${model.line}`, vscode.TreeItemCollapsibleState.None);
     this.iconPath = new vscode.ThemeIcon('arrow-right');
-    this.tooltip = model.line;
+    // The full next-step sentence, rendered as Markdown (like a task's
+    // evidence): it is the same kind of free-form document prose, and the
+    // label above already truncates it. isTrusted is left off (default
+    // false), same reasoning as formatTaskTooltip.
+    const tooltip = new vscode.MarkdownString();
+    tooltip.appendMarkdown(model.line);
+    tooltip.isTrusted = false;
+    this.tooltip = tooltip;
     this.contextValue = 'oddLedger.nextStep';
   }
 }

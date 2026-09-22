@@ -3,7 +3,14 @@ import { test } from 'node:test';
 import type { FeatureModel, ItemModel, SectionModel } from './build-feature-model';
 import { EMPTY_DOCUMENT_STRUCTURE } from './build-feature-model';
 import type { ChecklistCounts, DerivedItemState } from './derive-checklist-state';
-import { compareFeatures, filterFeature, isFeatureClosed } from './filter-and-order-features';
+import {
+  compareFeatures,
+  deriveFeatureRollupState,
+  deriveSectionRollupState,
+  filterFeature,
+  isFeatureClosed,
+  isSectionClosed,
+} from './filter-and-order-features';
 
 function counts(overrides: Partial<ChecklistCounts> = {}): ChecklistCounts {
   return { done: 0, total: 0, percentage: 0, doneUnproven: 0, ...overrides };
@@ -110,6 +117,74 @@ test('isFeatureClosed is false when a non-progress-bearing section still has an 
     ],
   });
   assert.equal(isFeatureClosed(model), false);
+});
+
+// --- isSectionClosed ---------------------------------------------------------
+
+test('isSectionClosed is true when every item in the section is done', () => {
+  const s = section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' })] });
+  assert.equal(isSectionClosed(s), true);
+});
+
+test('isSectionClosed is false when the section has an open item', () => {
+  const s = section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'open' })] });
+  assert.equal(isSectionClosed(s), false);
+});
+
+test('isSectionClosed is false for a section with zero items', () => {
+  const s = section({ items: [] });
+  assert.equal(isSectionClosed(s), false);
+});
+
+// --- deriveSectionRollupState / deriveFeatureRollupState ---------------------
+
+test('deriveSectionRollupState is "proven" when every item is done and none is done-unproven', () => {
+  const s = section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done' })] });
+  assert.equal(deriveSectionRollupState(s), 'proven');
+});
+
+test('deriveSectionRollupState is "unproven" when every item is closed but at least one is done-unproven', () => {
+  const s = section({
+    items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })],
+  });
+  assert.equal(deriveSectionRollupState(s), 'unproven');
+});
+
+test('deriveSectionRollupState is "open" when at least one item is still open', () => {
+  const s = section({
+    items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'open' })],
+  });
+  assert.equal(deriveSectionRollupState(s), 'open');
+});
+
+test('deriveFeatureRollupState is "proven" when every item across every section is done and none is done-unproven', () => {
+  const model = feature({
+    sections: [
+      section({ heading: 'Tasks', items: [item({ id: 'T1', derivedState: 'done' })] }),
+      section({ heading: 'Checks', items: [item({ id: 'C1', derivedState: 'done' })] }),
+    ],
+  });
+  assert.equal(deriveFeatureRollupState(model), 'proven');
+});
+
+test('deriveFeatureRollupState is "unproven" when every item is closed but at least one anywhere is done-unproven', () => {
+  const model = feature({
+    sections: [
+      section({ heading: 'Tasks', items: [item({ id: 'T1', derivedState: 'done' })] }),
+      section({ heading: 'Checks', items: [item({ id: 'C1', derivedState: 'done-unproven' })] }),
+    ],
+  });
+  assert.equal(deriveFeatureRollupState(model), 'unproven');
+});
+
+test('deriveFeatureRollupState is "open" when any section still has an open item', () => {
+  const model = feature({
+    sections: [
+      section({ heading: 'Tasks', items: [item({ id: 'T1', derivedState: 'done' })] }),
+      section({ heading: 'Checks', items: [item({ id: 'C1', derivedState: 'open' })] }),
+    ],
+  });
+  assert.equal(deriveFeatureRollupState(model), 'open');
 });
 
 // --- compareFeatures ---------------------------------------------------------
