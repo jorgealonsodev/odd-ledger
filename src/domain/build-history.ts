@@ -127,6 +127,20 @@ export interface BuildHistoryOptions {
   readonly skippedCount?: number;
 }
 
+/** The summary sentence for the one state buildHistory's early return used
+ * to collapse into UNAVAILABLE_HISTORY: revisions were found in range, but
+ * every one of them failed to read back (see fetch-git-revisions.ts's
+ * skippedCount — a blob-filtered clone or a pruned object store are the
+ * concrete cases). That is a different, more specific fact than "no history
+ * exists", and erasing it made both states render the same sentence. */
+function formatAllUnreadableSummary(skippedCount: number, truncated: boolean): string {
+  const base =
+    skippedCount === 1
+      ? '1 revision in git could not be read.'
+      : `${skippedCount} revisions in git could not be read.`;
+  return truncated ? `${base} (showing only the most recent ${skippedCount}.)` : base;
+}
+
 function formatSummary(points: readonly HistoryPoint[], truncated: boolean, skippedCount: number): string {
   const base =
     points.length === 1
@@ -154,6 +168,17 @@ function formatSummary(points: readonly HistoryPoint[], truncated: boolean, skip
 export function buildHistory(revisions: readonly HistoryRevisionInput[], options: BuildHistoryOptions = {}): FeatureHistory {
   const { truncated = false, skippedCount = 0 } = options;
   if (revisions.length === 0) {
+    if (skippedCount > 0) {
+      // Revisions were found in range, but none of them could be read back
+      // — not the same fact as "no revisions exist", so it gets its own
+      // honest sentence rather than UNAVAILABLE_HISTORY's generic one.
+      return {
+        available: false,
+        summary: formatAllUnreadableSummary(skippedCount, truncated),
+        points: [],
+        showChart: false,
+      };
+    }
     return UNAVAILABLE_HISTORY;
   }
 

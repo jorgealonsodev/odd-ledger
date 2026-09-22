@@ -124,6 +124,17 @@ suite('FeatureDetailPanel', () => {
     assert.notEqual(secondPanel, firstPanel);
   });
 
+  test('isAlive reports false before any show(), true once open, and false again once disposed', () => {
+    panel = new FeatureDetailPanel();
+    assert.equal(panel.isAlive(), false, 'no panel has been shown yet');
+
+    panel.show(model({ featureName: 'cache-warm-v2' }), '/home/dev/checkout-service');
+    assert.equal(panel.isAlive(), true, 'a panel is now open');
+
+    panel.dispose();
+    assert.equal(panel.isAlive(), false, 'dispose() closed it');
+  });
+
   test('escapes a feature name containing markup: no unescaped angle bracket reaches the HTML', () => {
     panel = new FeatureDetailPanel();
     const maliciousName = '<img src=x onerror=alert(1)>';

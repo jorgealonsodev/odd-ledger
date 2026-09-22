@@ -138,6 +138,14 @@ test('skipped revisions are counted in the summary rather than silently shrinkin
   assert.match(history.summary, /^1 revision in git, on 2026-09-21\. \(2 revisions in range could not be read and are not included\.\)$/);
 });
 
+test('when every revision in range failed to read, the summary states that honestly instead of collapsing to "not available"', () => {
+  const history = buildHistory([], { skippedCount: 3 });
+  assert.deepEqual(history.points, []);
+  assert.equal(history.showChart, false);
+  assert.match(history.summary, /3 revisions? .*could not be read/i);
+  assert.doesNotMatch(history.summary, /not available/i);
+});
+
 // --- mostRecentWorkDate ------------------------------------------------------
 
 test('mostRecentWorkDate is the newest revision\'s date', () => {

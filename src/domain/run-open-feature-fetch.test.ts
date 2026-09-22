@@ -7,9 +7,20 @@ import { EMPTY_DOCUMENT_STRUCTURE, type FeatureModel } from './build-feature-mod
 const EMPTY_COUNTS = { done: 0, total: 0, percentage: 0, doneUnproven: 0 };
 const NO_REVISIONS: FetchedRevisions = { revisions: [], truncated: false, skippedCount: 0 };
 const slimModel = (featureName: string): FeatureModel => ({ featureName, documentPath: `/workspace/odd/tasks/${featureName}.md`, title: null, branch: null, progress: EMPTY_COUNTS, sections: [], nextStep: null, structure: EMPTY_DOCUMENT_STRUCTURE });
-function fakePanel(): { panel: OpenFeaturePanel; calls: Array<{ history: unknown }> } {
+function fakePanel(): {
+  panel: OpenFeaturePanel;
+  calls: Array<{ history: unknown }>;
+  setAlive: (alive: boolean) => void;
+} {
   const calls: Array<{ history: unknown }> = [];
-  return { panel: { show: (_m, _r, _l, history) => calls.push({ history }) }, calls };
+  let alive = true;
+  return {
+    panel: { show: (_m, _r, _l, history) => calls.push({ history }), isAlive: () => alive },
+    calls,
+    setAlive: (value: boolean) => {
+      alive = value;
+    },
+  };
 }
 
 test('renders immediately with PENDING_HISTORY, then fills in the resolved history', async () => {
@@ -35,4 +46,19 @@ test('drops the resolved result once isCurrent reports a newer request has taken
   resolveFetch(NO_REVISIONS);
   await done;
   assert.equal(calls.length, 1, "a stale fetch's resolved history must not render");
+});
+
+test('does not re-render once the panel has been disposed, even though this is still the latest request', async () => {
+  const { panel, calls, setAlive } = fakePanel();
+  let resolveFetch!: (r: FetchedRevisions) => void;
+  const fetch = () => new Promise<FetchedRevisions>((resolve) => (resolveFetch = resolve));
+  // isCurrent stays true throughout: no newer openFeature request started.
+  // Only the panel's own aliveness changes, simulating the user closing it
+  // while the fetch was still in flight.
+  const done = runOpenFeatureFetch(slimModel('closed-mid-fetch'), '/workspace', panel, fetch, () => true);
+  assert.equal(calls.length, 1, 'expected the immediate PENDING_HISTORY render');
+  setAlive(false);
+  resolveFetch(NO_REVISIONS);
+  await done;
+  assert.equal(calls.length, 1, 'a disposed panel must not be re-rendered, or it would reopen itself');
 });

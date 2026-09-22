@@ -461,6 +461,15 @@ export class FeatureDetailPanel implements vscode.Disposable {
     return this.panel;
   }
 
+  /** Whether a panel is currently open — false before the first show() and
+   * again once the user (or dispose()) has closed it. This is the seam
+   * run-open-feature-fetch.ts's OpenFeaturePanel interface asks for, so its
+   * deferred render can tell a closed panel from a still-open one without
+   * that vscode-free module importing vscode itself. */
+  isAlive(): boolean {
+    return this.panel !== undefined;
+  }
+
   /**
    * Opens the detail panel for `model`, or reveals and re-renders the
    * already-open one. `workspaceRoot` is the folder the document was
