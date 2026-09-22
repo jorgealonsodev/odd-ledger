@@ -97,6 +97,15 @@ export class FeatureNode extends vscode.TreeItem {
       ? new vscode.ThemeIcon('checklist', new vscode.ThemeColor('disabledForeground'))
       : new vscode.ThemeIcon('checklist');
     this.contextValue = 'oddLedger.feature';
+    // Clicking a feature opens the detail panel (PRD). Passing `this`
+    // works even though the constructor is still running: the command
+    // only fires later, once the tree item is fully constructed, and by
+    // then every field above is set.
+    this.command = {
+      command: 'oddLedger.openFeature',
+      title: 'Open Feature',
+      arguments: [this],
+    };
   }
 }
 

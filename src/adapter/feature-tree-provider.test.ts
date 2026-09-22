@@ -131,6 +131,13 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.match(node.tooltip as string, /feat\/sample/);
   });
 
+  test("a feature node's command opens the detail panel, passing itself as the argument (T10)", () => {
+    const node = new FeatureNode(feature());
+    assert.ok(node.command);
+    assert.equal(node.command!.command, 'oddLedger.openFeature');
+    assert.deepEqual(node.command!.arguments, [node]);
+  });
+
   // --- SectionNode ---------------------------------------------------------
 
   test('a section node shows its heading as written and its own done/total', () => {

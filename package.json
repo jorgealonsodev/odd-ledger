@@ -48,6 +48,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "oddLedger.openFeature",
+        "title": "Open Feature",
+        "category": "ODD Ledger"
+      },
+      {
         "command": "oddLedger.filterAll",
         "title": "Show All",
         "category": "ODD Ledger",

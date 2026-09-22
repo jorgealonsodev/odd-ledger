@@ -19,4 +19,13 @@ suite('Extension activation', () => {
     const commands = await vscode.commands.getCommands(true);
     assert.ok(commands.includes('oddLedger.refresh'), 'oddLedger.refresh was not registered');
   });
+
+  test('registers the openFeature command (T10)', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('oddLedger.openFeature'), 'oddLedger.openFeature was not registered');
+  });
 });
