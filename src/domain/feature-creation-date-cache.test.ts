@@ -153,6 +153,82 @@ test('a rejected fetch does not call onResolved, and is not cached as a date', a
   assert.equal(cache.get('/x/f.md'), undefined);
 });
 
+test('ensure() never runs more than 4 fetches at once (git-spawn-hardening R4): the rest queue instead of spawning immediately', () => {
+  const started: string[] = [];
+  const cache = new FeatureCreationDateCache(async (_repoRoot: string, documentPath: string) => {
+    started.push(documentPath);
+    return new Promise<string | null>(() => {
+      // Deliberately never settles: this test only checks how many fetches
+      // are allowed to start, not what happens once one finishes.
+    });
+  });
+
+  const paths = ['/x/a.md', '/x/b.md', '/x/c.md', '/x/d.md', '/x/e.md', '/x/f.md'];
+  for (const path of paths) {
+    cache.ensure('/repo', path, () => {});
+  }
+
+  assert.deepEqual(started, ['/x/a.md', '/x/b.md', '/x/c.md', '/x/d.md']);
+});
+
+test('a queued path eventually fetches once an in-flight slot frees up, and its onResolved still fires', async () => {
+  const started: string[] = [];
+  const gates = new Map<string, { resolve: (value: string | null) => void }>();
+  const cache = new FeatureCreationDateCache(async (_repoRoot: string, documentPath: string) => {
+    started.push(documentPath);
+    return new Promise<string | null>((resolve) => {
+      gates.set(documentPath, { resolve });
+    });
+  });
+
+  const paths = ['/x/a.md', '/x/b.md', '/x/c.md', '/x/d.md', '/x/e.md'];
+  const resolvedPaths: string[] = [];
+  for (const path of paths) {
+    cache.ensure('/repo', path, () => resolvedPaths.push(path));
+  }
+
+  assert.deepEqual(started, ['/x/a.md', '/x/b.md', '/x/c.md', '/x/d.md']);
+  assert.equal(started.includes('/x/e.md'), false, '/x/e.md must stay queued while 4 fetches are already in flight');
+
+  gates.get('/x/a.md')!.resolve('2026-09-10T10:00:00+00:00');
+  await tick();
+
+  assert.ok(started.includes('/x/e.md'), 'the queued path must start once a slot frees up');
+  assert.equal(cache.get('/x/a.md'), '2026-09-10T10:00:00+00:00');
+  assert.deepEqual(resolvedPaths, ['/x/a.md']);
+
+  gates.get('/x/e.md')!.resolve('2026-09-12T10:00:00+00:00');
+  await tick();
+
+  assert.equal(cache.get('/x/e.md'), '2026-09-12T10:00:00+00:00');
+  assert.deepEqual(resolvedPaths, ['/x/a.md', '/x/e.md']);
+});
+
+test('the concurrency cap is per cache instance, not global: ensure() still respects existing known/unresolved/in-flight rules once queued', async () => {
+  let calls = 0;
+  const gates: Array<{ resolve: (value: string | null) => void }> = [];
+  const cache = new FeatureCreationDateCache(async () => {
+    calls += 1;
+    return new Promise<string | null>((resolve) => gates.push({ resolve }));
+  });
+
+  const paths = ['/x/a.md', '/x/b.md', '/x/c.md', '/x/d.md', '/x/e.md'];
+  for (const path of paths) {
+    cache.ensure('/repo', path, () => {});
+  }
+  // A second ensure() for the already-queued path must not double-queue it.
+  cache.ensure('/repo', '/x/e.md', () => {
+    throw new Error('onResolved must not fire twice for one still-unsettled fetch');
+  });
+
+  assert.equal(calls, 4);
+
+  gates[0].resolve(null);
+  await tick();
+
+  assert.equal(calls, 5);
+});
+
 test('different document paths are cached independently', async () => {
   const cache = new FeatureCreationDateCache(async (_repoRoot: string, documentPath: string) =>
     documentPath === '/x/a.md' ? '2026-09-10T10:00:00+00:00' : '2026-09-12T10:00:00+00:00',

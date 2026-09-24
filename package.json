@@ -3,7 +3,7 @@
   "displayName": "ODD Ledger",
   "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
   "icon": "resources/icon.png",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "jorgealonsodev",
   "repository": {
     "type": "git",
@@ -22,6 +22,12 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The Features tree and History region spawn git processes against the workspace's own repository as soon as it opens, using that repository's own local config. That is not safe to do in a workspace you have not chosen to trust."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [

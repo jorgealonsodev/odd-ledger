@@ -77,6 +77,9 @@ There is nothing to configure. The extension contributes no settings.
 - History reads the fifty most recent revisions, and says so when it truncates.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.
+- Creation-date lookups never run more than 4 at once. A project with many undated
+  features queues the rest rather than spawning one git process per document at once;
+  every queued one still resolves once a slot frees up.
 
 ## About what it reads
 
@@ -85,6 +88,13 @@ treated as data and never as instruction. The panel runs with scripts disabled u
 policy that denies everything except one stylesheet and the icon font. Markdown is rendered
 with raw HTML escaped, images off, and links restricted to `http`, `https` and `mailto`.
 Hovers are untrusted, so a document cannot hide a command behind one.
+
+Reading history and creation dates means running `git` against the workspace's own
+repository, using that repository's own local config — a repository you may not have chosen
+to trust. Every repo-local config key found able to make git run an arbitrary program
+(including via a bogus commit signature and a repo-local `gpg.program`) is neutralised on
+every invocation, and the extension declares itself unsupported in Restricted Mode
+(untrusted workspaces), so none of this runs at all until you trust the workspace.
 
 ## Licence
 

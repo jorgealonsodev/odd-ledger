@@ -160,3 +160,21 @@ test('carries no raw markdown-it package under node_modules: it ships bundled in
   const markdownItFiles = files.filter((file) => file.startsWith('node_modules/markdown-it/'));
   assert.deepEqual(markdownItFiles, []);
 });
+
+// git-spawn-hardening R1: without an explicit capabilities.untrustedWorkspaces
+// declaration, VS Code's default treats the extension as unsupported in
+// Restricted Mode, which is the wrong default to leave implicit for an
+// extension that spawns git processes as soon as a workspace opens — this
+// asserts the declaration is explicit and says "not supported" in words, not
+// just by omission.
+test('declares itself unsupported in untrusted (Restricted Mode) workspaces, explicitly', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+  assert.ok(pkg.capabilities && pkg.capabilities.untrustedWorkspaces, 'expected "capabilities.untrustedWorkspaces" in package.json');
+  assert.equal(pkg.capabilities.untrustedWorkspaces.supported, false);
+  assert.equal(
+    typeof pkg.capabilities.untrustedWorkspaces.description,
+    'string',
+    'expected a human-readable description explaining why untrusted workspaces are unsupported',
+  );
+  assert.ok(pkg.capabilities.untrustedWorkspaces.description.length > 0);
+});

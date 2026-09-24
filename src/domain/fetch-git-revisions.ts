@@ -12,7 +12,10 @@
  * dash or contains spaces can never be read as a git flag or split into
  * more than one argument. The repository directory is passed with git's own
  * `-C <dir>` flag, and the document path is always a separate argument
- * after `--`, per the same rule.
+ * after `--`, per the same rule. The config-override/env-stripping half of
+ * this safety pattern lives in git-process.ts, shared with
+ * fetch-feature-creation-date.ts (git-spawn-hardening R2) — see that
+ * module's own doc comment for what each override neutralises and why.
  *
  * A file not yet committed, a directory that is not a git repository, and
  * git not being installed are all normal states, not errors: any failure
@@ -26,33 +29,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { parseGitLogOutput } from './parse-git-log';
 import type { HistoryRevisionInput } from './build-history';
+import { GIT_TIMEOUT_MS, GIT_MAX_BUFFER_BYTES, gitConfigOverrides, gitEnv } from './git-process';
 
 const execFileAsync = promisify(execFile);
-
-const GIT_TIMEOUT_MS = 5000;
-const GIT_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 /** Caps fetched revisions so spawns, memory and chart points stay bounded. */
 export const MAX_FETCHED_REVISIONS = 50;
 
-/** `quotePath=false` keeps a non-ASCII path unquoted; the rest neutralise repo-local config keys that could spawn a command. */
-const GIT_CONFIG_OVERRIDES = ['-c', 'core.quotePath=false', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=', '-c', 'diff.external='];
-
-/** Deleted from the child env: git resolves these before `-C`. */
-const GIT_LOCATION_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES'];
-
-function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' };
-  for (const key of GIT_LOCATION_ENV_VARS) {
-    delete env[key];
-  }
-  return env;
-}
-
 /** Runs one git subcommand under `repoRoot`; `null` on any failure. */
 async function runGit(repoRoot: string, args: readonly string[]): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync('git', ['-C', repoRoot, ...GIT_CONFIG_OVERRIDES, ...args], {
+    const { stdout } = await execFileAsync('git', ['-C', repoRoot, ...gitConfigOverrides(), ...args], {
       timeout: GIT_TIMEOUT_MS,
       maxBuffer: GIT_MAX_BUFFER_BYTES,
       encoding: 'utf-8',
