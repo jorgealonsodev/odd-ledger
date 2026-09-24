@@ -270,3 +270,23 @@ across five source files, the manifest, README and CHANGELOG — tracked here pe
   empirical reproductions.
 
 ## Status: done
+
+## Review
+
+Native review lineage `review-9c7eaeca11cc86af` (tier high, 757 changed lines, consent
+granted by the user) approved on the first pass with no correction, and was acknowledged on
+2026-09-24. The risk lens returned no findings. Non-blocking follow-ups, left for a later
+cleanup pass:
+
+- `R3-signature-regression-vacuous-pass-creation-date` / `-revisions` (WARNING): the
+  signature regression tests assert only that the marker never ran, not that the result was
+  read from the signed commit. The RED run against pre-fix code did observe the marker
+  running, so they are not vacuous today, but a future change could make them so.
+- `R2-duplicated-bogus-signature-test-helpers` (WARNING), `R2-misleading-per-instance-test-name`
+  (WARNING), `R2-quotepath-rationale-dropped`, `R3-queue-drain-after-rejection-untested`,
+  `R3-drain-sync-throw-leaks-slot`, `R4-restricted-mode-full-disable` (SUGGESTION).
+
+## Next step
+
+Push `fix/git-spawn-hardening`, open the PR, merge with a merge commit after CI, and publish
+release `v1.1.1` with the packaged `.vsix`.
