@@ -5,11 +5,26 @@ import type { FeatureNode, TaskNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
 import { createOpenTask } from './adapter/open-task';
 import { refreshOpenPanelIfTouched, resolveWorkspaceRoot } from './adapter/refresh-open-panel';
+import { readStoredSortMode, writeStoredSortMode } from './adapter/sort-mode-state';
+import type { LedgerSortMode } from './domain/filter-and-order-features';
 import { fetchDocumentRevisions } from './domain/fetch-git-revisions';
+import { fetchFeatureCreationDate } from './domain/fetch-feature-creation-date';
 import { runOpenFeatureFetch } from './domain/run-open-feature-fetch';
 
+/** The three sort modes offered by the oddLedger.selectSortMode QuickPick,
+ * in the order they appear (feature-sort-modes). */
+const SORT_MODE_QUICK_PICK_ITEMS: ReadonlyArray<vscode.QuickPickItem & { mode: LedgerSortMode }> = [
+  { mode: 'created', label: 'Created', description: 'Oldest feature first, by its first commit' },
+  { mode: 'status', label: 'Status', description: 'Open features first, then closed' },
+  { mode: 'name', label: 'Name', description: 'Alphabetical' },
+];
+
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new FeatureTreeDataProvider();
+  const provider = new FeatureTreeDataProvider({
+    initialSortMode: readStoredSortMode(context.globalState),
+    persistSortMode: (mode) => writeStoredSortMode(context.globalState, mode),
+    fetchCreationDate: fetchFeatureCreationDate,
+  });
   const detailPanel = new FeatureDetailPanel(context.extensionUri);
   // FeatureDetailPanel implements vscode.Disposable, so pushing it here
   // is what disposes its open webview panel (if any) on deactivate.
@@ -82,6 +97,20 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(filterUnprovenCommand);
 
+  // Offers the three sort modes (feature-sort-modes) as a QuickPick, the
+  // current mode pre-selected via `picked`; choosing one calls
+  // provider.setSortMode, which itself persists the choice through the
+  // persistSortMode callback given above. Invoked with no selection made
+  // (Escape, or focus lost) leaves the current mode untouched.
+  const selectSortModeCommand = vscode.commands.registerCommand('oddLedger.selectSortMode', async () => {
+    const items = SORT_MODE_QUICK_PICK_ITEMS.map((item) => ({ ...item, picked: item.mode === provider.currentSortMode }));
+    const picked = await vscode.window.showQuickPick(items, { placeHolder: 'Sort ODD Ledger features by…' });
+    if (picked) {
+      provider.setSortMode(picked.mode);
+    }
+  });
+  context.subscriptions.push(selectSortModeCommand);
+
   // T15: keeps the tree and any open panel honest without a manual
   // refresh. A debounced batch of odd/tasks/*.md change/create/delete
   // events (across every workspace folder, and rebuilt when the folder
@@ -98,7 +127,7 @@ export function activate(context: vscode.ExtensionContext): void {
 export function deactivate(): void {
   // Everything activate() created (the tree view, the detail panel
   // manager, the refresh command, openFeature, openTask, the three filter
-  // commands, and the document watcher) is a disposable pushed to
-  // context.subscriptions, so VS Code tears it down on its own. Nothing
-  // else was allocated, so there is nothing to do here.
+  // commands, selectSortMode, and the document watcher) is a disposable
+  // pushed to context.subscriptions, so VS Code tears it down on its own.
+  // Nothing else was allocated, so there is nothing to do here.
 }

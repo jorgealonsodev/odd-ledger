@@ -75,6 +75,12 @@
         "title": "Show Unproven",
         "category": "ODD Ledger",
         "icon": "$(warning)"
+      },
+      {
+        "command": "oddLedger.selectSortMode",
+        "title": "Sort By…",
+        "category": "ODD Ledger",
+        "icon": "$(sort-precedence)"
       }
     ],
     "menus": {
@@ -96,6 +102,11 @@
         },
         {
           "command": "oddLedger.filterUnproven",
+          "when": "view == oddLedger.features",
+          "group": "navigation"
+        },
+        {
+          "command": "oddLedger.selectSortMode",
           "when": "view == oddLedger.features",
           "group": "navigation"
         }
