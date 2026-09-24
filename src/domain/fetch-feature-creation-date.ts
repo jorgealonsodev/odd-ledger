@@ -3,17 +3,19 @@
  * (feature-sort-modes): the author date of the first git commit that added
  * it, read with `git log --follow --diff-filter=A --format=%aI -- <path>`.
  *
- * Mirrors fetch-git-revisions.ts's execFile safety pattern rather than
- * importing from it (a deliberate duplication, not an oversight — see that
- * module's own doc comment for the underlying reasoning, and the feature's
- * task document for why this file does not share code with it): every
- * argument is its own literal execFile array element, never assembled into
- * a shell string; repo-local config keys that could run an external
- * command are neutralised the same way; environment variables that could
- * redirect git away from `repoRoot` are stripped; and any failure — no
- * repository, no commits, the document never committed, git not
- * installed, or output that did not parse into a usable date — is treated
- * as "no known creation date" by returning `null`, never by throwing.
+ * Shares its execFile safety pattern (git-process.ts) with
+ * fetch-git-revisions.ts (git-spawn-hardening R2 — the two started as
+ * independently maintained, byte-for-byte-identical copies of the same
+ * constants, until a proven live vulnerability in one of them needed
+ * fixing in both at once; see git-process.ts's own doc comment for what
+ * each override neutralises and why): every argument is its own literal
+ * execFile array element, never assembled into a shell string; repo-local
+ * config keys that could run an external command are neutralised;
+ * environment variables that could redirect git away from `repoRoot` are
+ * stripped; and any failure — no repository, no commits, the document
+ * never committed, git not installed, or output that did not parse into a
+ * usable date — is treated as "no known creation date" by returning
+ * `null`, never by throwing.
  *
  * `--diff-filter=A` keeps only commits where this document's path (as
  * `--follow` traces it back through renames) was added, so a document
@@ -26,26 +28,9 @@
 
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { GIT_TIMEOUT_MS, GIT_MAX_BUFFER_BYTES, gitConfigOverrides, gitEnv } from './git-process';
 
 const execFileAsync = promisify(execFile);
-
-const GIT_TIMEOUT_MS = 5000;
-const GIT_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
-
-/** Same overrides as fetch-git-revisions.ts's GIT_CONFIG_OVERRIDES: neutralise
- * repo-local config keys that could otherwise spawn a command. */
-const GIT_CONFIG_OVERRIDES = ['-c', 'core.quotePath=false', '-c', 'core.fsmonitor=false', '-c', 'core.sshCommand=', '-c', 'diff.external='];
-
-/** Deleted from the child env: git resolves these before `-C`. */
-const GIT_LOCATION_ENV_VARS = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES'];
-
-function gitEnv(): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, GIT_PAGER: 'cat', GIT_TERMINAL_PROMPT: '0' };
-  for (const key of GIT_LOCATION_ENV_VARS) {
-    delete env[key];
-  }
-  return env;
-}
 
 /**
  * The earliest (oldest) author date this document was added under, across
@@ -59,7 +44,7 @@ export async function fetchFeatureCreationDate(repoRoot: string, documentPath: s
   try {
     ({ stdout } = await execFileAsync(
       'git',
-      ['-C', repoRoot, ...GIT_CONFIG_OVERRIDES, 'log', '--follow', '--diff-filter=A', '--format=%aI', '--', documentPath],
+      ['-C', repoRoot, ...gitConfigOverrides(), 'log', '--follow', '--diff-filter=A', '--format=%aI', '--', documentPath],
       {
         timeout: GIT_TIMEOUT_MS,
         maxBuffer: GIT_MAX_BUFFER_BYTES,

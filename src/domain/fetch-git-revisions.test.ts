@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchDocumentRevisions } from './fetch-git-revisions';
@@ -50,6 +50,53 @@ function commit(repoRoot: string, message: string, isoDate: string, ...relativeP
       GIT_COMMITTER_DATE: isoDate,
     },
   });
+}
+
+/**
+ * Adds `relativePath` as the repository's very first (root) commit, but
+ * writes it directly with `hash-object`/`update-ref` rather than
+ * `git commit`, so the resulting commit object carries a syntactically
+ * present `gpgsig` header — bogus, never meant to verify against any real
+ * key. This is exactly enough to trigger git's own signature-verification
+ * machinery (see git-spawn-hardening's task-doc investigation): a
+ * repository whose local config sets `log.showSignature=true` and
+ * `gpg.program` invokes that program against any *displayed* commit
+ * carrying this header, independent of whether `--pretty=format:` asks for
+ * a signature field at all.
+ */
+function commitWithBogusSignature(repoRoot: string, relativePath: string, message: string, isoDate: string): void {
+  execFileSync('git', ['-C', repoRoot, 'add', relativePath]);
+  const tree = execFileSync('git', ['-C', repoRoot, 'write-tree'], { encoding: 'utf-8' }).trim();
+  const epochSeconds = Math.floor(Date.parse(isoDate) / 1000);
+  const commitObject = [
+    `tree ${tree}`,
+    `author Test <test@example.invalid> ${epochSeconds} +0000`,
+    `committer Test <test@example.invalid> ${epochSeconds} +0000`,
+    'gpgsig -----BEGIN PGP SIGNATURE-----',
+    ' ',
+    ' fakefakefakefakefakefakefakefake',
+    ' -----END PGP SIGNATURE-----',
+    '',
+    message,
+    '',
+  ].join('\n');
+  const hash = execFileSync('git', ['-C', repoRoot, 'hash-object', '-t', 'commit', '-w', '--stdin'], {
+    input: commitObject,
+    encoding: 'utf-8',
+  }).trim();
+  execFileSync('git', ['-C', repoRoot, 'update-ref', 'refs/heads/main', hash]);
+}
+
+/** Points the repository's local config at a marker script standing in for
+ * an attacker-controlled `gpg.program`, and turns on `log.showSignature` —
+ * the one config combination proven able to make `git log` run an
+ * arbitrary program while reading document revisions. */
+function configureSignatureVerificationMarker(repoRoot: string, markerPath: string): void {
+  const markerScript = join(repoRoot, 'gpg-marker.sh');
+  writeFileSync(markerScript, `#!/bin/sh\ntouch "${markerPath}"\nexit 1\n`);
+  chmodSync(markerScript, 0o755);
+  execFileSync('git', ['-C', repoRoot, 'config', 'gpg.program', markerScript]);
+  execFileSync('git', ['-C', repoRoot, 'config', 'log.showSignature', 'true']);
 }
 
 test('a document with several commits: one revision per commit, newest first, each with its own text and date', { skip: !GIT_AVAILABLE && 'git is not installed on this machine' }, async () => {
@@ -185,3 +232,26 @@ test('a directory that is not a git repository: no revisions, not an error', { s
     cleanup(root);
   }
 });
+
+test(
+  'a repository whose local config would verify commit signatures through an external program never runs it (git-spawn-hardening R1: log.showSignature + gpg.program)',
+  { skip: !GIT_AVAILABLE && 'git is not installed on this machine' },
+  async () => {
+    const root = makeRepo();
+    try {
+      mkdirSync(join(root, 'odd', 'tasks'), { recursive: true });
+      const docPath = join(root, 'odd', 'tasks', 'sample-feature.md');
+      writeFileSync(docPath, '# sample-feature\n');
+      commitWithBogusSignature(root, 'odd/tasks/sample-feature.md', 'add feature (bogus-signed)', '2026-09-10T10:00:00+00:00');
+
+      const marker = join(root, 'gpg-marker-ran');
+      configureSignatureVerificationMarker(root, marker);
+
+      await fetchDocumentRevisions(root, docPath);
+
+      assert.equal(existsSync(marker), false, 'a repo-local gpg.program must never run while reading document revisions');
+    } finally {
+      cleanup(root);
+    }
+  },
+);
