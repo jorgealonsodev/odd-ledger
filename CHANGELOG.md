@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+Marketplace metadata only: the extension now lists the `Visualization` category and a set of
+search keywords, so it can be found in the Visual Studio Code Marketplace and Open VSX. No
+behaviour changes.
+
 ## 1.1.1
 
 Hardens the git reads behind the History region and `Created` sort mode:
