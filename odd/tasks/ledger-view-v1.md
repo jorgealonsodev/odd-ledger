@@ -788,13 +788,15 @@ defects close as one pass afterwards. Order within the pass is not fixed.
 Inherited from `docs/PRD.md`, verified against the five real documents locally and the
 synthetic corpus in CI:
 
-- [ ] All five real documents parse and render without error.
+- [x] All five real documents parse and render without error.
       Not provable here. This depends on the five real ODD documents, which deliberately
       never enter this repository. `real-corpus.optional.test.ts` checks parsing alone,
       opt-in via `ODD_LEDGER_REAL_CORPUS_DIR`, and it skipped in this audit's run of
       `npm run test:domain` for lack of that variable. Rendering is checked nowhere.
       Closing this needs someone with the real documents on disk to run that check, then
       open the built extension against them and look.
+      Evidence: accepted by the repository owner on 2026-09-24 on manual attestation, after
+      running the packaged 1.1.0 build; no automated check backs this item.
 
 - [x] Corpus document C renders two section nodes with IDs scoped per section.
       `full-pipeline.test.ts`: "conveyor-sort-routing-v1: two sections, a mixed-prefix
@@ -859,7 +861,7 @@ synthetic corpus in CI:
       implementation is a literal grey or dimmed colour, only the green "pass" or amber
       "warning" tokens.
 
-- [ ] A repository without `odd/tasks/` shows welcome content, not an error.
+- [x] A repository without `odd/tasks/` shows welcome content, not an error.
       Not provable here. `discover-feature-documents.test.ts`'s "returns an empty array
       when the root has no odd/ directory at all" and "...when odd/ exists but tasks/
       does not" prove the no-throw, empty-array half. The `viewsWelcome` text is a
@@ -867,8 +869,10 @@ synthetic corpus in CI:
       appears in the sidebar is VS Code's own rendering, which no extension-host test in
       this suite exercises. Closing this needs a human to open the extension against a
       repository without `odd/tasks/` and look.
+      Evidence: accepted by the repository owner on 2026-09-24 on manual attestation, after
+      running the packaged 1.1.0 build; no automated check backs this item.
 
-- [ ] The UI renders correctly in light, dark and high-contrast themes, and at a narrow
+- [x] The UI renders correctly in light, dark and high-contrast themes, and at a narrow
       sidebar width.
       Not provable here. `feature-detail-panel.test.ts`'s "declares a
       Content-Security-Policy and styles all three VS Code theme classes" and "the
@@ -877,6 +881,8 @@ synthetic corpus in CI:
       measures layout at a narrow width. Closing this needs a human to switch through
       light, dark and high-contrast themes and narrow the sidebar in the running
       extension.
+      Evidence: accepted by the repository owner on 2026-09-24 on manual attestation, after
+      running the packaged 1.1.0 build; no automated check backs this item.
 
 These eleven criteria were inherited from `docs/PRD.md` on day one and were never
 consulted as a gate while the twenty-four tasks above were closed: the tasks document
