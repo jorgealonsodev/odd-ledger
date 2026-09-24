@@ -127,6 +127,7 @@ tracked here per the ~400-line planning heuristic rather than as a hard cap.
       Evidence: see Progress.
 
 - [x] S8 Final verification pass and doc closure.
+      Evidence: `9239c16` — see Verification below.
 
 - [x] S9 Correction from native review lineage `review-a02553d0e2e9bf37`: fix an
       endless refresh loop in `FeatureCreationDateCache.ensure` on a document git
@@ -290,5 +291,7 @@ adapter-workspace 27 passing, 0 failing. Authored changed lines of the fix commi
 
 ## Next step
 
-Feature complete on `feat/feature-sort-modes`, 7 commits ahead of `main` (S1-S8 plus this
-correction), not pushed. Next step is the user's: review the branch and decide push/PR.
+Feature complete on `feat/feature-sort-modes`, 10 commits ahead of `main` (S1-S9), not
+pushed. Review lineage `review-a02553d0e2e9bf37` approved and acknowledged; the user tested
+the packaged `.vsix` on 2026-09-24 and reported it works. Next step is the user's: push,
+PR and release.
