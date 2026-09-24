@@ -128,6 +128,12 @@ tracked here per the ~400-line planning heuristic rather than as a hard cap.
 
 - [x] S8 Final verification pass and doc closure.
 
+- [x] S9 Correction from native review lineage `review-a02553d0e2e9bf37`: fix an
+      endless refresh loop in `FeatureCreationDateCache.ensure` on a document git
+      cannot date. Findings `R2-unknown-date-refetch-loop`, `R3-001`,
+      `R4-refresh-loop-on-unknown-date` (one corroborated CRITICAL defect, three
+      lens IDs). Evidence: see Progress.
+
 ## Acceptance criteria
 
 - Default tree order (no stored preference) is `created`: oldest-first by first-commit
@@ -217,6 +223,39 @@ tracked here per the ~400-line planning heuristic rather than as a hard cap.
 
 - **S8** DONE. Final verification (see Verification below).
 
+- **S9** DONE `8bb7c2a`. Native review lineage `review-a02553d0e2e9bf37` returned
+  `correction_required` with one corroborated CRITICAL defect across three lens IDs:
+  `R2-unknown-date-refetch-loop`, `R3-001`, `R4-refresh-loop-on-unknown-date`.
+  `FeatureCreationDateCache.ensure` called `onResolved` in `finally` even when the fetch
+  returned `null` or rejected, and never remembered a `null` outcome — the provider wires
+  `onResolved` to `changeEmitter.fire()`, so VS Code's re-query of `getChildren` restarted the
+  fetch and fired again, spinning forever whenever git is missing, the folder is not a repo, a
+  document is uncommitted, or git times out.
+
+  Fix: `known` (permanent, resolved dates) is now joined by an `unresolved` set (paths that
+  settled with `null` or rejected) — `ensure` skips both, and calls `onResolved` only when a
+  fetch actually finds a date. `invalidateUnresolved()` clears the `unresolved` set; it is
+  called from `FeatureTreeDataProvider.refresh()` (the manual refresh command and every
+  watcher-triggered rebuild), the one existing hook that already runs on both a user refresh
+  and a document change, so a document committed after an unresolved settle is re-checked on
+  the next refresh rather than never or on every redraw. Doc comments in
+  `feature-creation-date-cache.ts` and `feature-tree-provider.ts`, and README.md's `Created`
+  sort bullet, updated to describe this.
+
+  RED: `npm run compile` → `TS2339: Property 'invalidateUnresolved' does not exist on type
+  'FeatureCreationDateCache'` (tests written first, against the not-yet-existing method and
+  the not-yet-changed `ensure` contract).
+  GREEN: `npm run test:domain` 309/309 (308 pass + 1 opt-in skip) — 4 tests added/rewritten in
+  `feature-creation-date-cache.test.ts`: a null result does not call `onResolved`; a rejected
+  fetch does not call `onResolved`; a second `ensure()` for a settled-`null` path does not
+  refetch; `invalidateUnresolved()` lets it fetch again. The two pre-existing tests that
+  asserted the old "null is retried on the very next call" / "onResolved still fires on
+  rejection" contract were rewritten to the new one, per this task's instructions.
+  `npm run test:extension`: adapter-unit 126/126, adapter-workspace 27/27, 0 failing (both
+  profiles unaffected — no workspace-level test exercises this path yet).
+
+  Authored changed lines (`git show --shortstat 8bb7c2a`): see Verification.
+
 ## Verification
 
 - `npm run compile`: clean, no errors.
@@ -244,8 +283,12 @@ under the ~400-line-per-task heuristic's total for 6 implementation tasks and re
 mid-feature chain-strategy decision; delivery (push, PR) remains the user's decision under
 ordinary repository policy and was explicitly out of scope for this work.
 
+**S9 (correction)**: `npm run compile` clean; `npm run test:domain` 309 tests, 308 pass, 1
+skipped (same opt-in check), 0 failing; `npm run test:extension` adapter-unit 126 passing,
+adapter-workspace 27 passing, 0 failing. Authored changed lines of the fix commit
+(`git show --shortstat 8bb7c2a`): `4 files changed, 101 insertions(+), 32 deletions(-)`.
+
 ## Next step
 
-Feature complete on `feat/feature-sort-modes`, 6 commits ahead of `main`, not pushed. Next
-step is the user's: review the branch and decide push/PR, or continue with acceptance-review
-findings if any.
+Feature complete on `feat/feature-sort-modes`, 7 commits ahead of `main` (S1-S8 plus this
+correction), not pushed. Next step is the user's: review the branch and decide push/PR.
