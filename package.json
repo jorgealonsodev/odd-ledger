@@ -3,7 +3,7 @@
   "displayName": "ODD Ledger",
   "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
   "icon": "resources/icon.png",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "publisher": "jorgealonsodev",
   "repository": {
     "type": "git",
@@ -18,7 +18,21 @@
     "vscode": "^1.85.0"
   },
   "categories": [
+    "Visualization",
     "Other"
+  ],
+  "keywords": [
+    "odd",
+    "organic driven development",
+    "tasks",
+    "task list",
+    "checklist",
+    "ledger",
+    "markdown",
+    "progress",
+    "evidence",
+    "git history",
+    "tree view"
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
