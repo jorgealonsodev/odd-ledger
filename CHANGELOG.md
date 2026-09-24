@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.0
+
+The features tree can now be sorted three ways, picked from a new `Sort By…` button on
+the view's toolbar, and the choice is remembered across sessions:
+
+- `Created`, the new default: oldest feature first, dated by the first commit that added
+  its document. A document git cannot date (no repository, git missing, or not committed
+  yet) sorts after every dated one, by name, and is checked again on the next refresh.
+- `Status`: the 1.0 order, open features first and closed ones last, each group by name.
+- `Name`: plain name order.
+
+Tasks inside a feature keep the order their document gives them. Creation dates are read
+from git in the background and cached, so the tree never waits on git to render.
+
 ## 1.0.1
 
 The project is now published under the MIT licence, and the licence text ships inside the
