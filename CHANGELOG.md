@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.1.1
+
+Hardens the git reads behind the History region and `Created` sort mode:
+
+- Neutralises a repo-local git config combination (`log.showSignature` plus a `gpg.program`)
+  that could make `git log` run an arbitrary program while reading a workspace's own
+  repository, on ordinary workspace open.
+- Declares the extension unsupported in Restricted Mode (untrusted workspaces), so none of
+  its git reads run until you trust the workspace.
+- Caps creation-date lookups at 4 git processes running at once; a project with many undated
+  features queues the rest instead of spawning one per document simultaneously.
+
+No user-visible behaviour changes otherwise.
+
 ## 1.1.0
 
 The features tree can now be sorted three ways, picked from a new `Sort By…` button on
