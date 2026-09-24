@@ -22,6 +22,12 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "The Features tree and History region spawn git processes against the workspace's own repository as soon as it opens, using that repository's own local config. That is not safe to do in a workspace you have not chosen to trust."
+    }
+  },
   "contributes": {
     "viewsContainers": {
       "activitybar": [
