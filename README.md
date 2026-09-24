@@ -72,7 +72,8 @@ There is nothing to configure. The extension contributes no settings.
 - The history region needs git. A project without it, or a document not yet committed,
   says history is unavailable rather than guessing.
 - `Created` sort needs git too, for the same first-commit date. A document git cannot date
-  (no repository, or not yet committed) sorts after every dated one, by name.
+  (no repository, or not yet committed) sorts after every dated one, by name; it is checked
+  again only after a manual refresh or a watched change, not on every tree redraw.
 - History reads the fifty most recent revisions, and says so when it truncates.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.

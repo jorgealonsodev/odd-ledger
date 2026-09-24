@@ -384,7 +384,10 @@ export class NextStepNode extends vscode.TreeItem {
  * `getChildren` cannot wait on without blocking the tree: `creationDateCache`
  * (see FeatureCreationDateCache) answers synchronously from whatever it
  * already knows and kicks off any missing fetch in the background,
- * re-rendering once it resolves. The default `fetchCreationDate` is a
+ * re-rendering only once a fetch actually finds a date — a document git
+ * cannot date stays silent until `refresh()` (manual, or a watcher event)
+ * next gives it a chance to be re-checked. The default `fetchCreationDate`
+ * is a
  * no-op that always answers "unknown" (so `created` degrades to name
  * order until a caller supplies the real git-backed one) — this class
  * itself never imports fetch-feature-creation-date.ts, so a test never
@@ -438,8 +441,15 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
     return this.sortMode;
   }
 
-  /** Re-renders the tree. Bound to the refresh command in extension.ts. */
+  /** Re-renders the tree. Bound to the refresh command in extension.ts and
+   * to every watcher-triggered rebuild (FeatureDocumentWatcher), so this
+   * is also the one place that invalidates "unresolved" creation dates:
+   * a document git could not date before (untracked, not yet committed)
+   * may have a real one now, and these are the two moments that could
+   * plausibly be true. See FeatureCreationDateCache's own doc for why a
+   * null result is otherwise never retried on its own. */
   refresh(): void {
+    this.creationDateCache.invalidateUnresolved();
     this.changeEmitter.fire();
   }
 

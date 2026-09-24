@@ -8,8 +8,16 @@ import { FeatureCreationDateCache } from './feature-creation-date-cache';
  * no real git process, no vscode. See that module's own doc comment for
  * the policy this exercises: get() is always synchronous, ensure() starts
  * at most one in-flight fetch per path, a resolved date is cached for
- * good, and null is retried on the next call.
+ * good, a null/rejected settle is remembered as "unresolved" (no refetch,
+ * no onResolved) until invalidateUnresolved() clears it.
  */
+
+/** Waits one macrotask turn — long enough for every microtask the cache's
+ * internal fetch .then()/.catch() chain queues to have already run, so a
+ * settle that deliberately does not call onResolved can still be awaited. */
+function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void; reject: (error: unknown) => void } {
   let resolve!: (value: T) => void;
@@ -68,18 +76,53 @@ test('a resolved date is cached for good: a second ensure() call does not fetch 
   assert.equal(cache.get('/x/f.md'), '2026-09-10T10:00:00+00:00');
 });
 
-test('a null result (no commit found yet) is retried on the next ensure() call, not cached', async () => {
+test('a null result does not call onResolved, and is not cached as a date', async () => {
   let calls = 0;
   const cache = new FeatureCreationDateCache(async () => {
     calls += 1;
     return null;
   });
 
-  await new Promise<void>((done) => cache.ensure('/repo', '/x/f.md', done));
+  cache.ensure('/repo', '/x/f.md', () => {
+    throw new Error('onResolved must not fire for a null result');
+  });
+  await tick();
+
   assert.equal(calls, 1);
   assert.equal(cache.get('/x/f.md'), undefined);
+});
 
-  await new Promise<void>((done) => cache.ensure('/repo', '/x/f.md', done));
+test('after a null result, a second ensure() call for the same path does not fetch again', async () => {
+  let calls = 0;
+  const cache = new FeatureCreationDateCache(async () => {
+    calls += 1;
+    return null;
+  });
+
+  cache.ensure('/repo', '/x/f.md', () => {});
+  await tick();
+  assert.equal(calls, 1);
+
+  cache.ensure('/repo', '/x/f.md', () => {});
+  await tick();
+  assert.equal(calls, 1);
+});
+
+test('invalidateUnresolved() lets a previously-null path fetch again on the next ensure() call', async () => {
+  let calls = 0;
+  const cache = new FeatureCreationDateCache(async () => {
+    calls += 1;
+    return null;
+  });
+
+  cache.ensure('/repo', '/x/f.md', () => {});
+  await tick();
+  assert.equal(calls, 1);
+
+  cache.invalidateUnresolved();
+
+  cache.ensure('/repo', '/x/f.md', () => {});
+  await tick();
   assert.equal(calls, 2);
 });
 
@@ -97,20 +140,16 @@ test('two ensure() calls for the same path while one fetch is already in flight 
   assert.equal(calls, 1);
 });
 
-test('a rejected fetch is treated the same as "no commit found yet": no throw, get() stays undefined, onResolved still fires', async () => {
+test('a rejected fetch does not call onResolved, and is not cached as a date', async () => {
   const cache = new FeatureCreationDateCache(async () => {
     throw new Error('boom');
   });
-  let resolved = false;
 
-  await new Promise<void>((done) => {
-    cache.ensure('/repo', '/x/f.md', () => {
-      resolved = true;
-      done();
-    });
+  cache.ensure('/repo', '/x/f.md', () => {
+    throw new Error('onResolved must not fire for a rejected fetch');
   });
+  await tick();
 
-  assert.equal(resolved, true);
   assert.equal(cache.get('/x/f.md'), undefined);
 });
 
