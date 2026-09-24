@@ -30,14 +30,36 @@
  * `fetchCreationDate` is injected (the same seam run-open-feature-fetch.ts
  * uses for fetchRevisions), so this class is testable with node --test and
  * a fake async function — no real git process, no vscode.
+ *
+ * `ensure` also caps how many fetches run at once (git-spawn-hardening R4):
+ * `getChildren` calls it once per undated document discovered in a single
+ * pass, so a project with many undated features would otherwise spawn that
+ * many simultaneous git processes on every workspace open. At most
+ * `MAX_CONCURRENT_FETCHES` fetches are ever in flight; a call beyond that
+ * cap is queued (per path, same idempotency as an in-flight fetch — a
+ * second `ensure` for an already-queued path is a no-op) and started the
+ * moment an in-flight fetch settles, so a big project still resolves every
+ * date eventually rather than only the first few.
  */
 
 export type FetchCreationDate = (repoRoot: string, documentPath: string) => Promise<string | null>;
+
+/** At most this many fetches run at once; the rest queue. See the class
+ * doc for why an unbounded fan-out is a problem worth bounding. */
+export const MAX_CONCURRENT_FETCHES = 4;
+
+interface QueuedFetch {
+  readonly repoRoot: string;
+  readonly documentPath: string;
+  readonly onResolved: () => void;
+}
 
 export class FeatureCreationDateCache {
   private readonly known = new Map<string, string>();
   private readonly unresolved = new Set<string>();
   private readonly inFlight = new Set<string>();
+  private readonly queuedPaths = new Set<string>();
+  private readonly queue: QueuedFetch[] = [];
 
   constructor(private readonly fetchCreationDate: FetchCreationDate) {}
 
@@ -49,16 +71,38 @@ export class FeatureCreationDateCache {
   }
 
   /**
-   * Starts a fetch for `documentPath` under `repoRoot` unless a date is
-   * already known, the path already settled "unresolved", or a fetch for
-   * it is already running (never more than one outstanding request per
-   * path). Calls `onResolved` only when the fetch actually finds a date —
-   * see the class doc for why a null/rejected settle must stay silent.
+   * Starts (or queues) a fetch for `documentPath` under `repoRoot` unless
+   * a date is already known, the path already settled "unresolved", or a
+   * fetch for it is already running or queued (never more than one
+   * outstanding request per path, in flight or queued). When
+   * `MAX_CONCURRENT_FETCHES` fetches are already in flight, this one
+   * queues instead of starting immediately, and runs once a slot frees up.
+   * Calls `onResolved` only when the fetch actually finds a date — see the
+   * class doc for why a null/rejected settle must stay silent.
    */
   ensure(repoRoot: string, documentPath: string, onResolved: () => void): void {
-    if (this.known.has(documentPath) || this.unresolved.has(documentPath) || this.inFlight.has(documentPath)) {
+    if (
+      this.known.has(documentPath) ||
+      this.unresolved.has(documentPath) ||
+      this.inFlight.has(documentPath) ||
+      this.queuedPaths.has(documentPath)
+    ) {
       return;
     }
+    if (this.inFlight.size >= MAX_CONCURRENT_FETCHES) {
+      this.queuedPaths.add(documentPath);
+      this.queue.push({ repoRoot, documentPath, onResolved });
+      return;
+    }
+    this.startFetch(repoRoot, documentPath, onResolved);
+  }
+
+  /** Actually spawns one fetch and wires its settle handling; the one
+   * thing both an immediate `ensure` call and a queued fetch's turn share.
+   * `drainQueue` in `finally` is what lets a queued path eventually run:
+   * every settle (success, no-date, or rejection alike) is a slot freeing
+   * up. */
+  private startFetch(repoRoot: string, documentPath: string, onResolved: () => void): void {
     this.inFlight.add(documentPath);
     void this.fetchCreationDate(repoRoot, documentPath)
       .then((date) => {
@@ -74,7 +118,23 @@ export class FeatureCreationDateCache {
         // Treated the same as "no commit found yet" — see the class doc.
         this.inFlight.delete(documentPath);
         this.unresolved.add(documentPath);
+      })
+      .finally(() => {
+        this.drainQueue();
       });
+  }
+
+  /** Starts queued fetches until the in-flight cap is reached again or the
+   * queue empties, whichever comes first. */
+  private drainQueue(): void {
+    while (this.inFlight.size < MAX_CONCURRENT_FETCHES) {
+      const next = this.queue.shift();
+      if (!next) {
+        return;
+      }
+      this.queuedPaths.delete(next.documentPath);
+      this.startFetch(next.repoRoot, next.documentPath, next.onResolved);
+    }
   }
 
   /** Clears every remembered "unresolved" path so the next `ensure` call
