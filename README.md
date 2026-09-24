@@ -33,6 +33,7 @@ read as answers when the truth is that nobody said.
 |-------|---------------|
 | Sidebar tree | Each feature, its sections and its tasks. A state icon, the identifier exactly as written, and the commit the evidence names |
 | Filters | `All`, `Open`, `Unproven`, from the view's toolbar |
+| Sort | `Created` (oldest feature first, by its first commit — the default), `Status` (open first, closed last), `Name` (alphabetical), from the view's toolbar. The choice is remembered |
 | Detail panel | The next step first, then progress, unproven and last-work tiles, the objective, every task with its evidence, the fields the document records, and the history |
 | History | Reconstructed from git: a sentence with the revision count and date range, and a chart once there are enough revisions to be worth plotting |
 
@@ -64,11 +65,15 @@ There is nothing to configure. The extension contributes no settings.
 | ODD Ledger: Show All | Removes the filter |
 | ODD Ledger: Show Open | Shows only what is not yet claimed as done |
 | ODD Ledger: Show Unproven | Shows only tasks ticked without evidence |
+| ODD Ledger: Sort By… | Picks the tree's sort order: Created, Status or Name |
 
 ## Limits worth knowing
 
 - The history region needs git. A project without it, or a document not yet committed,
   says history is unavailable rather than guessing.
+- `Created` sort needs git too, for the same first-commit date. A document git cannot date
+  (no repository, or not yet committed) sorts after every dated one, by name; it is checked
+  again only after a manual refresh or a watched change, not on every tree redraw.
 - History reads the fifty most recent revisions, and says so when it truncates.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.

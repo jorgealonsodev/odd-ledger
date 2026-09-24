@@ -433,6 +433,37 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
     assert.equal(fired, true);
   });
 
+  // --- sort mode (feature-sort-modes) ---------------------------------------
+
+  test('the provider defaults to the "created" sort mode', () => {
+    const provider = new FeatureTreeDataProvider();
+    assert.equal(provider.currentSortMode, 'created');
+  });
+
+  test('a constructor-supplied initialSortMode overrides the default', () => {
+    const provider = new FeatureTreeDataProvider({ initialSortMode: 'name' });
+    assert.equal(provider.currentSortMode, 'name');
+  });
+
+  test('setSortMode changes currentSortMode and fires the change event', () => {
+    const provider = new FeatureTreeDataProvider();
+    let fired = false;
+    provider.onDidChangeTreeData(() => {
+      fired = true;
+    });
+    provider.setSortMode('status');
+    assert.equal(provider.currentSortMode, 'status');
+    assert.equal(fired, true);
+  });
+
+  test('setSortMode calls the injected persistSortMode callback with the new mode', () => {
+    const persisted: string[] = [];
+    const provider = new FeatureTreeDataProvider({ persistSortMode: (mode) => persisted.push(mode) });
+    provider.setSortMode('name');
+    provider.setSortMode('status');
+    assert.deepEqual(persisted, ['name', 'status']);
+  });
+
   // --- clicking a task both reveals it and opens the detail panel (oddLedger.openTask) ---
 
   test("a task node's command runs oddLedger.openTask, passing itself as the sole argument", () => {

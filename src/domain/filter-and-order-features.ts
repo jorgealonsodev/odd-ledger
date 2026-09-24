@@ -107,8 +107,8 @@ export function deriveFeatureRollupState(model: FeatureModel): RollupState {
 }
 
 /**
- * Orders features for the tree: every open feature first, every closed
- * feature last, and within each group by feature name.
+ * Orders two features purely by name, with the pinned collation every
+ * other comparator here falls back to.
  *
  * `String.prototype.localeCompare` called with no locale or options
  * resolves its collation from the host process's ICU build and its
@@ -121,13 +121,107 @@ export function deriveFeatureRollupState(model: FeatureModel): RollupState {
  * rendered order is the same everywhere this extension runs, independent
  * of the host's configured locale.
  */
-export function compareFeatures(a: FeatureModel, b: FeatureModel): number {
+export function compareFeaturesByName(a: FeatureModel, b: FeatureModel): number {
+  return a.featureName.localeCompare(b.featureName, 'en', { sensitivity: 'base', numeric: true });
+}
+
+/**
+ * Orders features for sort mode `status` (feature-sort-modes): every open
+ * feature first, every closed feature last, then compareFeaturesByName
+ * within each group. This is the tree's original, and until
+ * feature-sort-modes its only, ordering.
+ */
+export function compareFeaturesByStatus(a: FeatureModel, b: FeatureModel): number {
   const aClosed = isFeatureClosed(a);
   const bClosed = isFeatureClosed(b);
   if (aClosed !== bClosed) {
     return aClosed ? 1 : -1;
   }
-  return a.featureName.localeCompare(b.featureName, 'en', { sensitivity: 'base', numeric: true });
+  return compareFeaturesByName(a, b);
+}
+
+/**
+ * Retained under its original name as an exact alias of
+ * compareFeaturesByStatus: every existing call site and test that imports
+ * `compareFeatures` keeps working unchanged, and there is exactly one
+ * definition of "status" ordering, not two that could drift apart.
+ */
+export const compareFeatures = compareFeaturesByStatus;
+
+/**
+ * Looks up a document's known creation date for sort mode `created`
+ * (feature-sort-modes); `undefined` means "not known (yet)" — see
+ * FeatureCreationDateCache, whose own `.get` is the caller most callers
+ * pass here. Kept as an injected function rather than a Map so a caller
+ * can hand over a live cache without copying it on every sort.
+ */
+export type CreatedDateLookup = (documentPath: string) => string | undefined;
+
+/**
+ * Orders features for sort mode `created` (feature-sort-modes): the
+ * earlier of the two documents' creation dates (as `createdDateFor`
+ * reports them) sorts first. A document `createdDateFor` has no answer
+ * for yet (untracked, not yet committed, or simply not fetched at the
+ * time this comparator ran) sorts after every document with a known date,
+ * which is what makes an unresolved git lookup degrade to "goes last"
+ * rather than blocking or throwing. Two equal or two unknown dates fall
+ * back to compareFeaturesByName, same as every other mode here.
+ */
+export function compareFeaturesByCreatedDate(a: FeatureModel, b: FeatureModel, createdDateFor: CreatedDateLookup): number {
+  const aDate = createdDateFor(a.documentPath);
+  const bDate = createdDateFor(b.documentPath);
+  if (aDate === undefined && bDate === undefined) {
+    return compareFeaturesByName(a, b);
+  }
+  if (aDate === undefined) {
+    return 1;
+  }
+  if (bDate === undefined) {
+    return -1;
+  }
+  const aTime = Date.parse(aDate);
+  const bTime = Date.parse(bDate);
+  if (aTime !== bTime) {
+    return aTime - bTime;
+  }
+  return compareFeaturesByName(a, b);
+}
+
+/** The three sort modes the tree's toolbar offers (feature-sort-modes):
+ * `created` (oldest feature first, the default), `status` (today's
+ * original open-first-then-closed order), and `name` (pure alphabetical). */
+export type LedgerSortMode = 'created' | 'status' | 'name';
+
+/** Narrows an unknown value (e.g. a persisted globalState read) to
+ * LedgerSortMode, so a corrupted or stale stored value never reaches
+ * orderFeatures as if it were one of the three known modes. */
+export function isLedgerSortMode(value: unknown): value is LedgerSortMode {
+  return value === 'created' || value === 'status' || value === 'name';
+}
+
+/**
+ * Orders `models` per `mode`, returning a new array — the input is never
+ * mutated, so a caller holding onto the original list (or passing the
+ * same array to more than one caller) is never surprised by an in-place
+ * sort. `createdDateFor` is only consulted for `created`; every other
+ * mode ignores it, so callers that never render `created` need not
+ * provide one — it defaults to "nothing known", which alone degrades
+ * `created` to alphabetical (see compareFeaturesByCreatedDate).
+ */
+export function orderFeatures(models: readonly FeatureModel[], mode: LedgerSortMode, createdDateFor: CreatedDateLookup = () => undefined): FeatureModel[] {
+  const ordered = [...models];
+  switch (mode) {
+    case 'name':
+      ordered.sort(compareFeaturesByName);
+      break;
+    case 'status':
+      ordered.sort(compareFeaturesByStatus);
+      break;
+    case 'created':
+      ordered.sort((a, b) => compareFeaturesByCreatedDate(a, b, createdDateFor));
+      break;
+  }
+  return ordered;
 }
 
 /** Whether `state` counts as "not claiming completion" for the `open`

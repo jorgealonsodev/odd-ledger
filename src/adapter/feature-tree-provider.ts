@@ -22,12 +22,14 @@ import { prepareEvidenceMarkdown } from '../domain/prepare-evidence-markdown';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
 import {
-  compareFeatures,
   deriveFeatureRollupState,
   deriveSectionRollupState,
   filterFeature,
+  orderFeatures,
 } from '../domain/filter-and-order-features';
-import type { LedgerFilter, RollupState } from '../domain/filter-and-order-features';
+import type { LedgerFilter, LedgerSortMode, RollupState } from '../domain/filter-and-order-features';
+import type { FetchCreationDate } from '../domain/feature-creation-date-cache';
+import { FeatureCreationDateCache } from '../domain/feature-creation-date-cache';
 import { ROLLUP_COLOR_TOKEN, ROLLUP_ICON_ID, STATE_COLOR_TOKEN } from '../domain/state-colors';
 
 /** Counts reported when a document cannot be read or parsed: the same
@@ -364,9 +366,8 @@ export class NextStepNode extends vscode.TreeItem {
  * discovery function, and every feature document found in any of them
  * becomes a root node in one flat list — there is no per-folder grouping
  * level, because nothing in the interface calls for one and a typical
- * project has one or two features total, not per folder. The list is
- * ordered by compareFeatures: open features first, closed ones last, by
- * name within each group.
+ * project has one or two features total, not per folder. The list's order
+ * is a separate decision — see "Sort mode" below.
  *
  * No-workspace decision: a window with no workspace folder at all
  * (`vscode.workspace.workspaceFolders` is `undefined`) produces the same
@@ -374,6 +375,25 @@ export class NextStepNode extends vscode.TreeItem {
  * "nothing to show", and both fall through to the same
  * `contributes.viewsWelcome` content — the view does not try to explain
  * *why* nothing was found, only that nothing was.
+ *
+ * Sort mode (feature-sort-modes): the root list is ordered by
+ * `orderFeatures` under whichever `LedgerSortMode` is currently selected —
+ * `created` (oldest feature first, the default), `status` (today's
+ * original open-first-then-closed order), or `name`. `created` needs a
+ * per-document creation date that only git can answer, which
+ * `getChildren` cannot wait on without blocking the tree: `creationDateCache`
+ * (see FeatureCreationDateCache) answers synchronously from whatever it
+ * already knows and kicks off any missing fetch in the background,
+ * re-rendering only once a fetch actually finds a date — a document git
+ * cannot date stays silent until `refresh()` (manual, or a watcher event)
+ * next gives it a chance to be re-checked. The default `fetchCreationDate`
+ * is a
+ * no-op that always answers "unknown" (so `created` degrades to name
+ * order until a caller supplies the real git-backed one) — this class
+ * itself never imports fetch-feature-creation-date.ts, so a test never
+ * accidentally spawns a real git process just by constructing a provider;
+ * extension.ts is the one production call site that wires the real
+ * function in.
  */
 export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTreeNode> {
   private readonly changeEmitter = new vscode.EventEmitter<
@@ -386,8 +406,50 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
    * default, so an unfiltered tree is what a fresh view shows. */
   private filter: LedgerFilter = 'all';
 
-  /** Re-renders the tree. Bound to the refresh command in extension.ts. */
+  /** The active sort mode (feature-sort-modes). `created` by default, per
+   * the feature's own spec — see the class doc for why that default is
+   * safe with no git access at all. */
+  private sortMode: LedgerSortMode;
+
+  /** Reports a chosen sort mode back to whoever constructed this provider
+   * (extension.ts persists it to `context.globalState`); a no-op unless
+   * a caller supplies one. */
+  private readonly persistSortMode: (mode: LedgerSortMode) => void;
+
+  /** Non-blocking cache of per-document creation dates behind `created`
+   * mode. See FeatureCreationDateCache's own doc for its caching policy. */
+  private readonly creationDateCache: FeatureCreationDateCache;
+
+  constructor(options?: {
+    /** Overrides the default `created` sort mode, e.g. with a mode
+     * restored from persisted state. */
+    initialSortMode?: LedgerSortMode;
+    /** Called with the new mode every time setSortMode changes it. */
+    persistSortMode?: (mode: LedgerSortMode) => void;
+    /** The git-backed creation-date lookup `created` mode uses. Defaults
+     * to a no-op that always reports "unknown" — see the class doc. */
+    fetchCreationDate?: FetchCreationDate;
+  }) {
+    this.sortMode = options?.initialSortMode ?? 'created';
+    this.persistSortMode = options?.persistSortMode ?? (() => {});
+    this.creationDateCache = new FeatureCreationDateCache(options?.fetchCreationDate ?? (async () => null));
+  }
+
+  /** The sort mode currently in effect. Read by the QuickPick command
+   * (extension.ts) to show which mode is already selected. */
+  get currentSortMode(): LedgerSortMode {
+    return this.sortMode;
+  }
+
+  /** Re-renders the tree. Bound to the refresh command in extension.ts and
+   * to every watcher-triggered rebuild (FeatureDocumentWatcher), so this
+   * is also the one place that invalidates "unresolved" creation dates:
+   * a document git could not date before (untracked, not yet committed)
+   * may have a real one now, and these are the two moments that could
+   * plausibly be true. See FeatureCreationDateCache's own doc for why a
+   * null result is otherwise never retried on its own. */
   refresh(): void {
+    this.creationDateCache.invalidateUnresolved();
     this.changeEmitter.fire();
   }
 
@@ -396,6 +458,15 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
    * extension.ts. */
   setFilter(filter: LedgerFilter): void {
     this.filter = filter;
+    this.changeEmitter.fire();
+  }
+
+  /** Changes the active sort mode, persists the choice, and re-renders.
+   * Bound to the `oddLedger.selectSortMode` QuickPick command in
+   * extension.ts. */
+  setSortMode(mode: LedgerSortMode): void {
+    this.sortMode = mode;
+    this.persistSortMode(mode);
     this.changeEmitter.fire();
   }
 
@@ -445,12 +516,18 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
         // rather than rendering an empty shell.
         if (filtered) {
           models.push(filtered);
+          // Only `created` mode ever needs a creation date, so this is
+          // the only mode that ever starts a git-backed fetch: `status`
+          // and `name` never spawn anything, however many features exist.
+          if (this.sortMode === 'created') {
+            this.creationDateCache.ensure(folder.uri.fsPath, document.path, () => this.changeEmitter.fire());
+          }
         }
       }
     }
 
-    models.sort(compareFeatures);
-    return models.map((model) => new FeatureNode(model));
+    const ordered = orderFeatures(models, this.sortMode, (path) => this.creationDateCache.get(path));
+    return ordered.map((model) => new FeatureNode(model));
   }
 
   /**

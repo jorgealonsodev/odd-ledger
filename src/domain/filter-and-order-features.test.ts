@@ -5,11 +5,16 @@ import { EMPTY_DOCUMENT_STRUCTURE } from './build-feature-model';
 import type { ChecklistCounts, DerivedItemState } from './derive-checklist-state';
 import {
   compareFeatures,
+  compareFeaturesByCreatedDate,
+  compareFeaturesByName,
+  compareFeaturesByStatus,
   deriveFeatureRollupState,
   deriveSectionRollupState,
   filterFeature,
   isFeatureClosed,
+  isLedgerSortMode,
   isSectionClosed,
+  orderFeatures,
 } from './filter-and-order-features';
 
 function counts(overrides: Partial<ChecklistCounts> = {}): ChecklistCounts {
@@ -233,6 +238,113 @@ test('compareFeatures ignores diacritics: "cafe" and "café" compare equal, prov
   const a = feature({ featureName: 'cafe' });
   const b = feature({ featureName: 'café' });
   assert.equal(compareFeatures(a, b), 0);
+});
+
+// --- sort modes (feature-sort-modes) ----------------------------------------
+
+test('compareFeaturesByStatus behaves exactly like compareFeatures (the "status" mode is today\'s only behaviour)', () => {
+  const open = feature({ featureName: 'zzz-open', sections: OPEN_SECTIONS });
+  const closed = feature({ featureName: 'aaa-closed', sections: CLOSED_SECTIONS });
+  assert.equal(compareFeaturesByStatus(closed, open), compareFeatures(closed, open));
+  assert.equal(compareFeatures, compareFeaturesByStatus);
+});
+
+test('compareFeaturesByName ignores status entirely, ordering purely by the pinned collation', () => {
+  const openZ = feature({ featureName: 'zzz-open', sections: OPEN_SECTIONS });
+  const closedA = feature({ featureName: 'aaa-closed', sections: CLOSED_SECTIONS });
+  assert.ok(compareFeaturesByName(closedA, openZ) < 0);
+  assert.ok(compareFeaturesByName(openZ, closedA) > 0);
+});
+
+test('isLedgerSortMode accepts exactly the three known modes and rejects anything else', () => {
+  assert.equal(isLedgerSortMode('created'), true);
+  assert.equal(isLedgerSortMode('status'), true);
+  assert.equal(isLedgerSortMode('name'), true);
+  assert.equal(isLedgerSortMode('date'), false);
+  assert.equal(isLedgerSortMode(undefined), false);
+  assert.equal(isLedgerSortMode(42), false);
+});
+
+// --- compareFeaturesByCreatedDate / orderFeatures('created') ---------------
+
+test('compareFeaturesByCreatedDate orders the earlier date first', () => {
+  const older = feature({ featureName: 'zzz-older', documentPath: '/x/older.md' });
+  const newer = feature({ featureName: 'aaa-newer', documentPath: '/x/newer.md' });
+  const dates = new Map([
+    ['/x/older.md', '2026-09-01T00:00:00+00:00'],
+    ['/x/newer.md', '2026-09-10T00:00:00+00:00'],
+  ]);
+  const lookup = (path: string) => dates.get(path);
+  assert.ok(compareFeaturesByCreatedDate(older, newer, lookup) < 0);
+  assert.ok(compareFeaturesByCreatedDate(newer, older, lookup) > 0);
+});
+
+test('compareFeaturesByCreatedDate falls back to name when both dates are unknown', () => {
+  const lookup = () => undefined;
+  const a = feature({ featureName: 'alpha', documentPath: '/x/a.md' });
+  const b = feature({ featureName: 'beta', documentPath: '/x/b.md' });
+  assert.ok(compareFeaturesByCreatedDate(a, b, lookup) < 0);
+});
+
+test('compareFeaturesByCreatedDate falls back to name when both dates are equal', () => {
+  const dates = new Map([
+    ['/x/a.md', '2026-09-01T00:00:00+00:00'],
+    ['/x/b.md', '2026-09-01T00:00:00+00:00'],
+  ]);
+  const lookup = (path: string) => dates.get(path);
+  const a = feature({ featureName: 'alpha', documentPath: '/x/a.md' });
+  const b = feature({ featureName: 'beta', documentPath: '/x/b.md' });
+  assert.ok(compareFeaturesByCreatedDate(a, b, lookup) < 0);
+});
+
+test('compareFeaturesByCreatedDate sorts a document with an unknown date after every dated document', () => {
+  const dates = new Map([['/x/dated.md', '2026-09-01T00:00:00+00:00']]);
+  const lookup = (path: string) => dates.get(path);
+  const dated = feature({ featureName: 'zzz-dated', documentPath: '/x/dated.md' });
+  const undated = feature({ featureName: 'aaa-undated', documentPath: '/x/undated.md' });
+  assert.ok(compareFeaturesByCreatedDate(dated, undated, lookup) < 0);
+  assert.ok(compareFeaturesByCreatedDate(undated, dated, lookup) > 0);
+});
+
+test('orderFeatures("created") sorts oldest first, undated documents last by name, with no lookup given at all', () => {
+  const a = feature({ featureName: 'a', documentPath: '/x/a.md' });
+  const b = feature({ featureName: 'b', documentPath: '/x/b.md' });
+  const ordered = orderFeatures([b, a], 'created');
+  // With no lookup, every date is unknown, so it falls back to name order.
+  assert.deepEqual(ordered.map((m) => m.featureName), ['a', 'b']);
+});
+
+test('orderFeatures("created") with a real lookup: oldest first', () => {
+  const oldOne = feature({ featureName: 'zzz-old', documentPath: '/x/old.md' });
+  const newOne = feature({ featureName: 'aaa-new', documentPath: '/x/new.md' });
+  const dates = new Map([
+    ['/x/old.md', '2026-01-01T00:00:00+00:00'],
+    ['/x/new.md', '2026-06-01T00:00:00+00:00'],
+  ]);
+  const ordered = orderFeatures([newOne, oldOne], 'created', (path) => dates.get(path));
+  assert.deepEqual(ordered.map((m) => m.featureName), ['zzz-old', 'aaa-new']);
+});
+
+test('orderFeatures("status") reproduces exactly compareFeatures\'s order', () => {
+  const open = feature({ featureName: 'zzz-open', sections: OPEN_SECTIONS });
+  const closed = feature({ featureName: 'aaa-closed', sections: CLOSED_SECTIONS });
+  const ordered = orderFeatures([closed, open], 'status');
+  assert.deepEqual(ordered.map((m) => m.featureName), ['zzz-open', 'aaa-closed']);
+});
+
+test('orderFeatures("name") ignores status', () => {
+  const open = feature({ featureName: 'zzz-open', sections: OPEN_SECTIONS });
+  const closed = feature({ featureName: 'aaa-closed', sections: CLOSED_SECTIONS });
+  const ordered = orderFeatures([open, closed], 'name');
+  assert.deepEqual(ordered.map((m) => m.featureName), ['aaa-closed', 'zzz-open']);
+});
+
+test('orderFeatures never mutates its input array', () => {
+  const a = feature({ featureName: 'b' });
+  const b = feature({ featureName: 'a' });
+  const input = [a, b];
+  orderFeatures(input, 'name');
+  assert.deepEqual(input.map((m) => m.featureName), ['b', 'a']);
 });
 
 // --- filterFeature -----------------------------------------------------------

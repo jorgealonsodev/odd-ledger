@@ -81,6 +81,15 @@ suite('Extension activation', () => {
     assert.ok(commands.includes('oddLedger.openFeature'), 'oddLedger.openFeature was not registered');
   });
 
+  test('registers the selectSortMode command (feature-sort-modes)', async () => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    await extension!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(commands.includes('oddLedger.selectSortMode'), 'oddLedger.selectSortMode was not registered');
+  });
+
   test('oddLedger.openFeature invoked with no argument returns without opening a panel', async () => {
     const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
     assert.ok(extension);

@@ -31,12 +31,16 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
     assert.match(folders![0].uri.fsPath, /sample-workspace$/);
   });
 
-  test('getChildren returns one feature node per discovered document, closed features sorted last (T9)', () => {
+  test('getChildren returns one feature node per discovered document, closed features sorted last under sort mode "status" (T9)', () => {
     // Discovery (and this fixture's own alphabetical names) would produce
-    // alpha, beta, zeta. alpha-widget-cache is fully closed, so it must
-    // move to the end: an implementation that dropped the sort, or kept
-    // sorting by name alone, would fail this assertion.
-    const provider = new FeatureTreeDataProvider();
+    // alpha, beta, zeta. alpha-widget-cache is fully closed, so under
+    // "status" mode it must move to the end: an implementation that
+    // dropped the sort, or kept sorting by name alone, would fail this
+    // assertion. Sort mode is pinned explicitly (feature-sort-modes
+    // changed the tree's default to "created") because this test's own
+    // purpose is exercising "status" ordering specifically, independent
+    // of whatever the provider's default happens to be.
+    const provider = new FeatureTreeDataProvider({ initialSortMode: 'status' });
     const children = provider.getChildren() as FeatureNode[];
 
     assert.deepEqual(
@@ -236,13 +240,134 @@ suite('FeatureTreeDataProvider — workspace with odd/tasks/', () => {
   });
 
   test('setFilter("all") after a narrower filter restores every feature and every item', () => {
-    const provider = new FeatureTreeDataProvider();
+    // Sort mode pinned to "status" for the same reason as the T9 ordering
+    // test above: this assertion checks the closed-last order, not
+    // whatever the provider's default sort mode happens to be.
+    const provider = new FeatureTreeDataProvider({ initialSortMode: 'status' });
     provider.setFilter('unproven');
     provider.setFilter('all');
     const children = provider.getChildren() as FeatureNode[];
     assert.deepEqual(
       children.map((c) => c.model.featureName),
       ['beta-notification-hub', 'zeta-report-export', 'alpha-widget-cache'],
+    );
+  });
+
+  // --- sort mode (feature-sort-modes) ---------------------------------------
+
+  test('sort mode "created": before any date resolves, an unknown date falls back to name order', () => {
+    // No fetchCreationDate is supplied, so the default no-op resolver
+    // never returns a date at all: every feature stays "unknown" and
+    // orderFeatures falls back to compareFeaturesByName.
+    const provider = new FeatureTreeDataProvider({ initialSortMode: 'created' });
+    const children = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      children.map((c) => c.model.featureName),
+      ['alpha-widget-cache', 'beta-notification-hub', 'zeta-report-export'],
+    );
+  });
+
+  test('sort mode "created": once the injected git-backed dates resolve, the tree re-renders oldest first', async () => {
+    // A fake fetchCreationDate, never real git — this profile's fixture
+    // lives inside this very repository, and this codebase's own
+    // discipline (see fetch-git-revisions.test.ts) is to never run a real
+    // git lookup against this repository's own history in a test.
+    const dates: Record<string, string> = {
+      'alpha-widget-cache.md': '2026-09-05T00:00:00+00:00',
+      'beta-notification-hub.md': '2026-09-01T00:00:00+00:00',
+      'zeta-report-export.md': '2026-09-10T00:00:00+00:00',
+    };
+    const provider = new FeatureTreeDataProvider({
+      initialSortMode: 'created',
+      fetchCreationDate: async (_repoRoot, documentPath) => {
+        const key = Object.keys(dates).find((name) => documentPath.endsWith(name));
+        return key ? dates[key] : null;
+      },
+    });
+
+    // First call kicks off the three fetches; nothing is cached yet, so
+    // it still falls back to name order.
+    const first = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      first.map((c) => c.model.featureName),
+      ['alpha-widget-cache', 'beta-notification-hub', 'zeta-report-export'],
+    );
+
+    // Each resolved fetch fires the change event once; wait for all three
+    // before asking for children again.
+    await new Promise<void>((resolve) => {
+      let fired = 0;
+      provider.onDidChangeTreeData(() => {
+        fired += 1;
+        if (fired === 3) {
+          resolve();
+        }
+      });
+    });
+
+    const second = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      second.map((c) => c.model.featureName),
+      ['beta-notification-hub', 'alpha-widget-cache', 'zeta-report-export'],
+    );
+  });
+
+  test('sort mode "status"/"name" never call fetchCreationDate: only "created" needs it', () => {
+    let calls = 0;
+    const provider = new FeatureTreeDataProvider({
+      initialSortMode: 'status',
+      fetchCreationDate: async () => {
+        calls += 1;
+        return null;
+      },
+    });
+    provider.getChildren();
+    provider.setSortMode('name');
+    provider.getChildren();
+    assert.equal(calls, 0);
+  });
+
+  test('setSortMode("created") after discovery: switching modes starts fetching and eventually re-sorts', async () => {
+    const dates: Record<string, string> = {
+      'alpha-widget-cache.md': '2026-09-05T00:00:00+00:00',
+      'beta-notification-hub.md': '2026-09-01T00:00:00+00:00',
+      'zeta-report-export.md': '2026-09-10T00:00:00+00:00',
+    };
+    const provider = new FeatureTreeDataProvider({
+      initialSortMode: 'name',
+      fetchCreationDate: async (_repoRoot, documentPath) => {
+        const key = Object.keys(dates).find((name) => documentPath.endsWith(name));
+        return key ? dates[key] : null;
+      },
+    });
+
+    const byName = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      byName.map((c) => c.model.featureName),
+      ['alpha-widget-cache', 'beta-notification-hub', 'zeta-report-export'],
+    );
+
+    // setSortMode fires its own (synchronous) change event; register the
+    // fetch-completion listener only after it and the discovery pass that
+    // starts the three fetches, so it counts exactly those three
+    // resolutions and nothing else.
+    provider.setSortMode('created');
+    provider.getChildren();
+
+    await new Promise<void>((resolve) => {
+      let fired = 0;
+      provider.onDidChangeTreeData(() => {
+        fired += 1;
+        if (fired === 3) {
+          resolve();
+        }
+      });
+    });
+
+    const byCreated = provider.getChildren() as FeatureNode[];
+    assert.deepEqual(
+      byCreated.map((c) => c.model.featureName),
+      ['beta-notification-hub', 'alpha-widget-cache', 'zeta-report-export'],
     );
   });
 });
