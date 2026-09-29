@@ -26,6 +26,7 @@ import { join } from 'node:path';
 import { parseDocumentStructure } from './parse-document-structure';
 import { parseChecklist } from './parse-checklist';
 import { deriveChecklistState } from './derive-checklist-state';
+import { buildFeatureModel } from './build-feature-model';
 
 const REAL_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_CORPUS_DIR';
 
@@ -58,5 +59,73 @@ test('the real ODD documents on this machine parse without throwing (opt-in, loc
 
     assert.ok(structure.title !== null, `expected an H1 title in a real document`);
     assert.ok(structure.sections.length > 0, `expected at least one section in a real document`);
+  }
+});
+
+/**
+ * A second, separate opt-in: a directory of real documents that record
+ * their evidence in a progress table (one row per closed task). Kept apart
+ * from the corpus above because it asserts something about content that
+ * only such documents satisfy: the ledger must read every closed task as
+ * proven through its table row, and must read the same tasks as unproven
+ * again once the table is removed, which proves the table is the source of
+ * the evidence. Nothing about what a document says is asserted or written
+ * anywhere; only counts.
+ */
+const REAL_TABLE_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_TABLE_CORPUS_DIR';
+
+/** The document without its progress-table sections: every line from a
+ * heading that starts with `progress` or `evidence` up to the next heading
+ * of the same or a higher level. */
+function withoutProgressTables(text: string): string {
+  const kept: string[] = [];
+  let skippingLevel: number | null = null;
+  for (const line of text.split(/\r\n|\r|\n/)) {
+    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (heading) {
+      const level = heading[1].length;
+      if (skippingLevel !== null && level <= skippingLevel) {
+        skippingLevel = null;
+      }
+      if (skippingLevel === null && /^(progress|evidence)/i.test(heading[2].trim())) {
+        skippingLevel = level;
+      }
+    }
+    if (skippingLevel === null) {
+      kept.push(line);
+    }
+  }
+  return kept.join('\n');
+}
+
+test('real table-format documents read every closed task as proven, and unproven again without the table (opt-in, local only)', (t) => {
+  const dir = process.env[REAL_TABLE_CORPUS_DIR_ENV];
+
+  if (!dir || !existsSync(dir)) {
+    t.skip(
+      `${REAL_TABLE_CORPUS_DIR_ENV} is not set, or does not point to an existing directory; ` +
+        'skipping the real table-format check. Set it to a local directory of *.md documents ' +
+        'that record their evidence in a progress table. Expected and correct on any other machine, including CI.',
+    );
+    return;
+  }
+
+  const files = readdirSync(dir).filter((name) => name.endsWith('.md') && statSync(join(dir, name)).isFile());
+  assert.ok(files.length > 0, `${REAL_TABLE_CORPUS_DIR_ENV} is set to a directory with no .md files in it`);
+
+  for (const file of files) {
+    const text = readFileSync(join(dir, file), 'utf8');
+
+    const withTable = buildFeatureModel('real', join(dir, file), text);
+    assert.ok(withTable.progress.done > 0, 'expected the document to have closed tasks');
+    assert.equal(withTable.progress.doneUnproven, 0, 'expected every closed task to be proven through its table row');
+
+    const withoutTable = buildFeatureModel('real', join(dir, file), withoutProgressTables(text));
+    assert.equal(
+      withoutTable.progress.doneUnproven,
+      withoutTable.progress.done,
+      'expected every closed task to be unproven again once the table is removed',
+    );
+    assert.equal(withoutTable.progress.done, withTable.progress.done, 'removing the table must not change which tasks are closed');
   }
 });
