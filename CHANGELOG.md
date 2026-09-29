@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2
 
 An entry or a table row that names several tasks now counts for all of them.
 
