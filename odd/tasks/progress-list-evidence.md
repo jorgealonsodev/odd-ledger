@@ -81,7 +81,7 @@ list is as unambiguous as a table row.
 
 - [x] T1 Domain: parse progress list entries under progress/evidence headings, link them to tasks, derive evidence/commit, honesty rules, merge with inline and table evidence; source labels; panel/tree show list evidence and notes.
 - [x] T1b Fix review-0086e4aff8993372 advisories (four items).
-- [ ] T2 Release 1.2.1: README/CHANGELOG, version bump, merge, tag, GitHub release with vsix.
+- [x] T2 Release 1.2.1: README/CHANGELOG, version bump, merge, tag, GitHub release with vsix.
 
 ## Acceptance criteria
 
@@ -99,7 +99,8 @@ list is as unambiguous as a table row.
 | --- | --- | --- | --- | --- |
 | T1 | delegated writer (writer trigger: parser, linker, model, panel and tree tests) | `abcf10e` | RED: compile error (missing `parseProgressLists`, `listSourceLabel`, 3-arg `linkProgressEvidence`) then GREEN test:domain 453 pass / 0 fail (2 opt-in skips), test:extension 148 + 27 pass, check-types and compile clean, test:package 18 pass; real-document probe: done 30, doneUnproven 5 (was 28) | medium → granted → **approved** (review-0086e4aff8993372, 1 lens, burned); 4 advisories → T1b |
 | T1b | delegated writer (writer trigger: parser, linker, tests, docs) | `e2d416a` | RED: 3 new tests failing (trailing punctuation proves, thematic breaks become entries, checkbox consumes item number), then GREEN test:domain 457 pass / 0 fail, test:extension, check-types, test:package clean; real-document probe still done 30 / total 37 / doneUnproven 5 (its unproven tasks have no entry) | assessed b24c1cf..22feb54: medium, review_due=false (under_budget, 64 lines); fixes the advisories of the approved review-0086e4aff8993372 |
+| T2 | parent (release, mechanical) | `a7e4a05` | PR #9 merged as `b534730`, tag `v1.2.1`, GitHub release with vsix: https://github.com/jorgealonsodev/odd-ledger/releases/tag/v1.2.1 | not applicable (release commit) |
 
 ## Next step
 
-T2 — release 1.2.1 (parent).
+Done. Follow-up: feature `multi-id-evidence` (lines naming several IDs count for all).

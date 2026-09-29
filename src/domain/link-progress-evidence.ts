@@ -5,14 +5,19 @@
  *
  * The rules follow the ledger's one principle, that a tick is not proof:
  *
- *  - A row links to a task by ID: the whole first cell (emphasis and code
- *    markers stripped) equals the ID, else its first whitespace token is a
- *    valid ID (the checklist parser's own grammar) that equals it. Several
- *    rows may link to one task; they stay in document order.
- *  - A row that could link to more than one task (a duplicated ID) is
- *    ambiguous and links to none: the ledger names it, never guesses.
- *  - A row that matches no task is unattached: shown at document level,
- *    counted toward no task.
+ *  - A row links by its first cell (emphasis and code markers stripped):
+ *    the whole cell equals a task ID, else the cell starts with a run of
+ *    known task IDs joined by `,`, `/`, `&`, `+`, ` and ` or ` y `
+ *    (`T1, T2`, `T1/T2`). The run ends at the first word that is not a
+ *    known ID or a joiner. The row links to EVERY task it names and is
+ *    listed once per task. Several rows may link to one task; they stay in
+ *    document order.
+ *  - An ID that could match more than one task (a duplicated ID) is
+ *    ambiguous per ID: the row is named as ambiguous once and linked to
+ *    none of those tasks, while the other IDs it names still link.
+ *  - A row that names no task, or whose ID run is a range (`T1 - T3`,
+ *    `T1..T3`, `T1 to T3`, never expanded), is unattached: shown at
+ *    document level, counted toward no task.
  *  - A linked row proves its task only when a cell other than the ID cell
  *    and the Route column holds something that is neither empty, nor just a
  *    dash, nor a bare placeholder (`pending`, `n/a`, `tbd`). The route says
@@ -20,18 +25,28 @@
  *    it never turns a tick into proof.
  *
  * A progress list entry (parseProgressLists) is read the same way, as one
- * more piece of evidence in the same shape:
+ * more piece of evidence in the same shape. It links to every task it
+ * names in two positions, and only these:
  *
- *  - It links by its first token, emphasis and code markers stripped and
- *    trailing `:`, `,`, `—`, `–` removed, which must equal a task ID
- *    exactly. A range (`T0.1–T0.6b`) or an ID list (`T1, T2`) is never
- *    expanded: it links to nothing and stays a note.
- *  - A note (first token names no task) is unattached, and a duplicated ID
- *    is ambiguous, exactly as for a table row.
- *  - It proves its task only when something remains after removing the ID,
- *    its separators and one leading status word (`done`, `pending`, ...)
- *    that is not empty, a dash or a bare placeholder: `- T1 done` alone is
- *    a tick's echo, not proof.
+ *  - Its leading ID group, read as for a table's first cell
+ *    (`- T1.3/T1.4 + follow-ups: ...`, `- T1, T2 done: ...`).
+ *  - A known task ID that is the first word of a clause: right after a `,`
+ *    or `;` outside parentheses, brackets and code spans
+ *    (`- T1.1 \`22deb08\` (RED), T1.2 \`7a87dcf\` (GREEN)`).
+ *
+ *  An ID mentioned mid-sentence never links, and a range never expands:
+ *  a leading range makes the whole entry a note. A note is unattached; an
+ *  entry naming a duplicated ID is ambiguous for that ID, as for a row.
+ *  Each linked task receives the whole entry (for a single-ID entry, the
+ *  text after the ID) with the same source label. The commit shown is the
+ *  first commit-like token after the leading ID group; a clause-start ID
+ *  prefers the first one inside its own clause.
+ *
+ *  It proves its tasks only when something remains after removing the
+ *  leading ID group, its separators and one leading status word (`done`,
+ *  `pending`, ...) that is not empty, a dash or a bare placeholder:
+ *  `- T1, T2 done` alone is a tick's echo for both, not proof. Clause-start
+ *  IDs do not change what counts as content.
  *
  * Whether a proven row changes a task's state is decided by the caller
  * (derive-checklist-state.ts only ever consults it for a checked task), so
@@ -41,7 +56,6 @@
  */
 
 import { extractCommitReference } from './derive-checklist-state';
-import { isIdentifierToken } from './parse-checklist';
 import { stripInlineMarkup } from './parse-progress-tables';
 import type { ProgressListEntry, ProgressTable, ProgressTableRow } from './parse-progress-tables';
 
@@ -129,10 +143,6 @@ function isRouteHeader(header: string | undefined): boolean {
   return (header ?? '').toLowerCase().includes('route');
 }
 
-function firstToken(text: string): string {
-  return text.split(/\s+/)[0] ?? '';
-}
-
 function findCommit(table: ProgressTable, cells: readonly string[]): string | null {
   const commitColumns: number[] = [];
   table.headers.forEach((header, index) => {
@@ -187,36 +197,187 @@ function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: numbe
 }
 
 /** A leading status word an entry may carry before its real content. */
-const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
+const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|not started|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
 const LEADING_SEPARATOR_RE = /^[\s:,—–-]+/;
+/** What may sit between an ID group and the text after it: separators plus
+ * a joiner left dangling because no known ID followed it. */
+const GROUP_TAIL_SEPARATOR_RE = /^[\s:,;+/&—–-]+/;
 const TRAILING_PUNCTUATION_RE = /[\s.!?;:,…]+$/u;
 const TRAILING_ID_PUNCTUATION_RE = /[:,—–_]+$/;
 const ENTRY_TOKEN_RE = /^[\s*_`]*([^\s*`]+)[*`_]*/;
 
-/** An entry's first token and what follows it. */
-interface EntryHead {
-  /** The first token with markup and trailing `:`, `,`, `—`, `–` removed. */
-  readonly token: string;
-  /** The text after the token and its separators, markup left as written. */
-  readonly rest: string;
-  /** Whether a `,` or dash follows the token and leads to another known
-   * task ID: an ID list or a range, which is never expanded. */
-  readonly listLike: boolean;
+const ID_CANDIDATE_RE = /^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*/;
+const MARKUP_AND_SPACE_RE = /^[\s*_`]*/;
+const MARKUP_RE = /^[*_`]*/;
+/** What may follow an ID for it to be a whole token rather than a prefix. */
+const ID_BOUNDARY_RE = /^(?:$|[\s:,;/&+—–])/;
+/** What joins two IDs of one group. */
+const JOINER_RE = /^(?:\s*[,/&+]\s*|\s+(?:and|y)\s+)/i;
+/** A range operator glued to the ID and to what follows (`T1–T3`, `T1..T3`). */
+const TIGHT_RANGE_RE = /^(?:[—–-]|\.\.|…)(?=[A-Za-z0-9])/;
+/** A spaced range operator (`T1 - T3`, `T1 – T3`, `T1 to T3`). */
+const SPACED_RANGE_RE = /^\s+(?:(?:[—–-]|\.\.|…)\s*|to\s+)/i;
+
+/** The known task IDs an entry or an ID cell names in one position. */
+interface IdGroup {
+  /** Distinct known IDs, in the order written. */
+  readonly ids: string[];
+  /** Offset in the text just after the last ID (and its markup). */
+  readonly end: number;
+  /** Whether the group is, or starts, a range: never expanded, so the
+   * whole position names nothing. */
+  readonly range: boolean;
 }
 
-function readEntryHead(text: string, byId: ReadonlyMap<string, number[]>): EntryHead {
+const NO_GROUP = (start: number, range: boolean): IdGroup => ({ ids: [], end: start, range });
+
+/** Whether an ID-shaped word that is not a task ID is a range written with
+ * a hyphen and a known ID in front of it (`T1-T3`). */
+function isHyphenRange(candidate: string, byId: ReadonlyMap<string, number[]>): boolean {
+  for (let i = candidate.indexOf('-'); i !== -1; i = candidate.indexOf('-', i + 1)) {
+    if (byId.has(candidate.slice(0, i))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether a range operator follows an ID and leads to something that reads
+ * as its other end: glued on both sides, or spaced and naming a known ID. */
+function rangeFollows(tail: string, byId: ReadonlyMap<string, number[]>): boolean {
+  if (TIGHT_RANGE_RE.test(tail)) {
+    return true;
+  }
+  const spaced = SPACED_RANGE_RE.exec(tail);
+  if (!spaced) {
+    return false;
+  }
+  const next = ID_CANDIDATE_RE.exec(tail.slice(spaced[0].length));
+  return next !== null && byId.has(next[0]);
+}
+
+/**
+ * Reads the run of known task IDs that starts at `start` (after any
+ * whitespace and emphasis or code markers), joined by `,`, `/`, `&`, `+`,
+ * ` and ` or ` y `. The run ends at the first token that is not a known ID
+ * or a joiner. A range inside the run makes the whole position a range.
+ */
+function readIdGroup(text: string, start: number, byId: ReadonlyMap<string, number[]>): IdGroup {
+  const ids: string[] = [];
+  let pos = start;
+  let end = start;
+  for (;;) {
+    const idStart = pos + (MARKUP_AND_SPACE_RE.exec(text.slice(pos)) as RegExpExecArray)[0].length;
+    const candidate = ID_CANDIDATE_RE.exec(text.slice(idStart));
+    if (!candidate) {
+      break;
+    }
+    if (!byId.has(candidate[0])) {
+      if (ids.length === 0 && isHyphenRange(candidate[0], byId)) {
+        return NO_GROUP(start, true);
+      }
+      break;
+    }
+    const afterId = idStart + candidate[0].length;
+    const idEnd = afterId + (MARKUP_RE.exec(text.slice(afterId)) as RegExpExecArray)[0].length;
+    const tail = text.slice(idEnd);
+    if (!ID_BOUNDARY_RE.test(tail)) {
+      break;
+    }
+    if (rangeFollows(tail, byId)) {
+      return NO_GROUP(start, true);
+    }
+    if (!ids.includes(candidate[0])) {
+      ids.push(candidate[0]);
+    }
+    end = idEnd;
+    const joiner = JOINER_RE.exec(tail);
+    if (!joiner) {
+      break;
+    }
+    pos = idEnd + joiner[0].length;
+  }
+  return { ids, end, range: false };
+}
+
+/** The offsets just after each `,` or `;` that is outside parentheses,
+ * brackets and code spans: where a clause of an entry starts. */
+function clauseStarts(text: string, from: number): number[] {
+  const starts: number[] = [];
+  let depth = 0;
+  let inCode = false;
+  for (let i = from; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '`') {
+      inCode = !inCode;
+    } else if (inCode) {
+      continue;
+    } else if (ch === '(' || ch === '[') {
+      depth++;
+    } else if (ch === ')' || ch === ']') {
+      depth = Math.max(0, depth - 1);
+    } else if ((ch === ',' || ch === ';') && depth === 0) {
+      starts.push(i + 1);
+    }
+  }
+  return starts;
+}
+
+/** A task ID an entry names, with the commit inside its own clause when
+ * it starts one, and whether its own text proves its task. */
+interface NamedId {
+  readonly id: string;
+  readonly clauseCommit: string | null;
+  readonly proves: boolean;
+}
+
+/** What a list entry names: the IDs it links to and the text after its
+ * leading ID group. */
+interface EntryNames {
+  readonly named: NamedId[];
+  /** The text after the leading ID group and its separators. */
+  readonly rest: string;
+}
+
+function readEntryNames(text: string, byId: ReadonlyMap<string, number[]>): EntryNames {
+  const leading = readIdGroup(text, 0, byId);
+  const rest = text.slice(leading.end).replace(GROUP_TAIL_SEPARATOR_RE, '');
+  if (leading.range) {
+    return { named: [], rest };
+  }
+  const starts = clauseStarts(text, leading.end);
+  const clauses = starts.flatMap((start, index) => {
+    const clauseEnd = index + 1 < starts.length ? starts[index + 1] - 1 : text.length;
+    const group = readIdGroup(text.slice(0, clauseEnd), start, byId);
+    return group.range || group.ids.length === 0 ? [] : [{ start, clauseEnd, group }];
+  });
+  // A clause's own text runs to the boundary that starts another linked ID.
+  const ownText = (from: number, index: number): string => text.slice(from, index + 1 < clauses.length ? clauses[index + 1].start - 1 : text.length);
+  const leadingProves = entryProves(text.slice(leading.end, clauses.length > 0 ? clauses[0].start - 1 : text.length).replace(GROUP_TAIL_SEPARATOR_RE, ''));
+  const named: NamedId[] = leading.ids.map((id) => ({ id, clauseCommit: null, proves: leadingProves }));
+  clauses.forEach(({ clauseEnd, group }, index) => {
+    const proves = entryProves(ownText(group.end, index).replace(GROUP_TAIL_SEPARATOR_RE, ''));
+    const clauseCommit = extractCommitReference(text.slice(group.end, clauseEnd));
+    for (const id of group.ids) {
+      if (!named.some((n) => n.id === id)) {
+        named.push({ id, clauseCommit, proves });
+      }
+    }
+  });
+  return { named, rest };
+}
+
+/** An entry's first token, for the note and ambiguous cases, and what
+ * follows it. */
+function readFirstToken(text: string): { token: string; rest: string } {
   const match = ENTRY_TOKEN_RE.exec(text);
   if (!match) {
-    return { token: '', rest: text.trim(), listLike: false };
+    return { token: '', rest: text.trim() };
   }
-  const rawToken = match[1];
-  const token = rawToken.replace(TRAILING_ID_PUNCTUATION_RE, '');
-  const rest = text.slice(match[0].length).replace(LEADING_SEPARATOR_RE, '');
-  const afterToken = text.slice(match[0].length);
-  const separated = /,$/.test(rawToken) || /^\s*[—–-]/.test(afterToken);
-  const next = ENTRY_TOKEN_RE.exec(afterToken.replace(LEADING_SEPARATOR_RE, ''));
-  const nextToken = next ? next[1].replace(TRAILING_ID_PUNCTUATION_RE, '') : '';
-  return { token, rest, listLike: separated && byId.has(nextToken) };
+  return {
+    token: match[1].replace(TRAILING_ID_PUNCTUATION_RE, ''),
+    rest: text.slice(match[0].length).replace(LEADING_SEPARATOR_RE, ''),
+  };
 }
 
 /** Whether what an entry says after its ID proves anything: something is
@@ -250,9 +411,9 @@ function tasksWithId(byId: ReadonlyMap<string, number[]>, id: string): number[] 
 }
 
 /**
- * Links every row of `tables` to `tasks`. See the module note for the
- * rules; tables and rows are visited in document order, so each task's
- * rows come out in document order too.
+ * Links every row of `tables` and every entry of `lists` to `tasks`. See
+ * the module note for the rules; tables and rows are visited in document
+ * order, so each task's rows come out in document order too.
  */
 export function linkProgressEvidence(
   tables: readonly ProgressTable[],
@@ -271,45 +432,61 @@ export function linkProgressEvidence(
   const ambiguous: TableEvidenceRow[] = [];
   const provenStartLines = new Set<number>();
 
-  const place = (row: TableEvidenceRow, matches: readonly number[]): void => {
-    if (matches.length === 0) {
-      unattached.push(row);
-    } else if (matches.length > 1) {
-      ambiguous.push(row);
-    } else {
-      const startLine = matches[0];
-      byTask.set(startLine, [...(byTask.get(startLine) ?? []), row]);
-      if (row.proves) {
-        provenStartLines.add(startLine);
-      }
+  const linkTo = (startLine: number, row: TableEvidenceRow): void => {
+    byTask.set(startLine, [...(byTask.get(startLine) ?? []), row]);
+    if (row.proves) {
+      provenStartLines.add(startLine);
     }
   };
 
+  /** How many tasks the IDs that name several tasks (a duplicated ID)
+   * could link to; the sum over those IDs. */
+  const ambiguousCount = (ids: readonly string[]): number =>
+    ids.reduce((sum, id) => sum + (tasksWithId(byId, id).length > 1 ? tasksWithId(byId, id).length : 0), 0);
+
   for (const table of tables) {
     for (const tableRow of table.rows) {
-      const idCell = stripInlineMarkup(tableRow.cells[0] ?? '');
-      let matches = tasksWithId(byId, idCell);
-      if (matches.length === 0) {
-        const token = firstToken(idCell);
-        if (token !== idCell && isIdentifierToken(token)) {
-          matches = tasksWithId(byId, token);
-        }
+      // The whole cell equal to an ID wins over reading it as a group.
+      const wholeCell = stripInlineMarkup(tableRow.cells[0] ?? '');
+      const group: IdGroup = byId.has(wholeCell) ? { ids: [wholeCell], end: 0, range: false } : readIdGroup(tableRow.cells[0] ?? '', 0, byId);
+      const single = group.ids.length === 1;
+      const linkable = group.ids.filter((id) => tasksWithId(byId, id).length === 1);
+      for (const id of linkable) {
+        const row = buildRow(table, tableRow, 1);
+        linkTo(tasksWithId(byId, id)[0], single ? row : { ...row, idCell: id });
       }
-      place(buildRow(table, tableRow, matches.length), matches);
+      const dupCount = ambiguousCount(group.ids);
+      if (dupCount > 0) {
+        ambiguous.push(buildRow(table, tableRow, dupCount));
+      } else if (linkable.length === 0) {
+        unattached.push(buildRow(table, tableRow, 0));
+      }
     }
   }
 
   // List entries come after every table row, so a task's evidence reads
   // inline, then table rows, then list entries.
   for (const entry of lists) {
-    const head = readEntryHead(entry.text, byId);
-    const matches = !head.listLike && isIdentifierToken(head.token) ? tasksWithId(byId, head.token) : [];
-    const proves = entryProves(head.rest);
-    if (matches.length === 1) {
-      const shown = head.rest.trim().length > 0 ? head.rest : entry.text;
-      place(buildEntryRow(entry, head.token, shown, head.rest, proves, 1), matches);
-    } else {
-      place(buildEntryRow(entry, head.token, entry.text, entry.text, proves, matches.length), matches);
+    const { named, rest } = readEntryNames(entry.text, byId);
+    const ids = named.map((n) => n.id);
+    if (named.length === 0) {
+      const first = readFirstToken(entry.text);
+      unattached.push(buildEntryRow(entry, first.token, entry.text, entry.text, entryProves(first.rest), 0));
+      continue;
+    }
+    const shown = named.length === 1 && rest.trim().length > 0 ? rest : entry.text;
+    const entryCommit = extractCommitReference(rest);
+    for (const { id, clauseCommit, proves } of named) {
+      const matches = tasksWithId(byId, id);
+      if (matches.length === 1) {
+        const row = buildEntryRow(entry, id, shown, rest, proves, 1);
+        linkTo(matches[0], { ...row, commit: clauseCommit ?? entryCommit });
+      }
+    }
+    const dupCount = ambiguousCount(ids);
+    if (dupCount > 0) {
+      const firstDup = named.find((n) => tasksWithId(byId, n.id).length > 1) as NamedId;
+      ambiguous.push(buildEntryRow(entry, firstDup.id, entry.text, entry.text, firstDup.proves, dupCount));
     }
   }
 

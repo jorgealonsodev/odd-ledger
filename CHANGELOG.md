@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.2.2
+
+An entry or a table row that names several tasks now counts for all of them.
+
+- A progress list entry links to every task in its **leading ID group**: IDs joined by `,`,
+  `/`, `&`, `+`, ` and ` or ` y ` (`- T1.3/T1.4 + follow-ups: \`9f1e2d3\``,
+  `- T1, T2 done: \`abc1234\``, `- T1 y T2: ...`). The group ends at the first word that is not
+  a known task ID or a joiner. A table row does the same with its first cell
+  (`| T1, T2 | ... |`).
+- A list entry also links to a known task ID that starts a **clause** after a `,` or `;`
+  (`- T1.1 \`22deb08\` (RED ...), T1.2 \`7a87dcf\` (GREEN ...)` links T1.1 and T1.2, each showing
+  the commit in its own clause). Commas inside parentheses, brackets or code spans do not open
+  a clause; table rows use only their first cell.
+- A clause-start ID proves its task only through its **own clause** (the text up to the next
+  clause that starts another linked ID): `- T1 \`aaaa111\` done, T2 pending` proves T1 and links
+  T2 unproven. `not started` counts as a status word, like `pending`.
+- An ID mentioned mid-sentence (`fixes a regression introduced by T2.1`) never links.
+  Ranges (`T0.1–T0.6b`, `T1 - T3`, `T1..T3`, `T1 to T3`) are never expanded; a leading range
+  keeps the entry a note.
+- Every linked task receives the whole entry or row as evidence, with the same source label,
+  listed once per task. An entry proves a checked task only when something remains after the
+  ID group and one status word, so `- T1, T2 done.` proves neither.
+- A duplicated task ID stays ambiguous per ID: the entry links the other IDs it names and is
+  named once as ambiguous for the duplicated one.
+- Behaviour change: an entry such as `- T1, T2 done: ...` or `- T1/T2 ...`, and a table row
+  such as `| T1, T2 | ... |`, used to be a note (list) or link to the first task only (table);
+  they now link to every task named. A table ID cell such as `T1:` now links, and a spaced range
+  in a table cell (`T1 - T3`) is now a note instead of linking `T1`.
+
 ## 1.2.1
 
 Reads evidence recorded as a **progress list**, so a document that logs one bullet per task
