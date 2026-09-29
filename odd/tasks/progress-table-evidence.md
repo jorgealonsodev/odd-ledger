@@ -80,7 +80,7 @@ different formats:
 
 - [x] T1 Domain: detect progress tables (heading + first-column header, tolerant GFM syntax) and parse rows into cells.
 - [x] T2 Domain: link rows to tasks (exact, first-token, ambiguous, unattached); derive table evidence, commit and route; apply honesty rules; merge with inline evidence (inline first); tree/tiles counts.
-- [ ] T3 Adapter: panel shows table evidence with its source label, plus unattached and ambiguous rows; tree label uses the linked commit; escaping unchanged.
+- [x] T3 Adapter: panel shows table evidence with its source label, plus unattached and ambiguous rows; tree label uses the linked commit; escaping unchanged.
 - [ ] T4 Fixtures, optional real-corpus check against the real document, README/CHANGELOG docs.
 
 ## Acceptance criteria
@@ -100,7 +100,8 @@ different formats:
 | --- | --- | --- | --- | --- |
 | T1 | delegated (writer trigger: 2+ non-trivial files) | 1abda48 | RED 15 failed (stub returned no tables) -> GREEN 337 pass / 0 fail (`npm run test:domain`); `npm run check-types` clean | pending (slice review) |
 | T2 | delegated (writer trigger: 2+ non-trivial files) | 1bfb633 | RED 18 failed (linker stub) then 11 failed (model/derive wiring stubs) -> GREEN 376 pass / 0 fail, 1 skipped (`npm run test:domain`); `npm run check-types` clean | pending (slice review) |
+| T3 | delegated (writer trigger: 2+ non-trivial files) | cae1186 | RED 11 domain failures (evidence-piece stubs) + 7 extension-host failures (tooltip/panel/regions) -> GREEN `npm run test:domain` 389 pass / 0 fail; `npm run test:extension` 139 adapter-unit + 27 workspace passing; `npm run check-types` clean | pending (slice review) |
 
 ## Next step
 
-T3 — adapter: panel and tree render table evidence with sources.
+T4 — fixtures, real-corpus check, README/CHANGELOG.

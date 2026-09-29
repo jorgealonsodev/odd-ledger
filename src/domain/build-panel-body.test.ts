@@ -287,3 +287,44 @@ test('UNPROVEN_TASK_MESSAGE states what is missing in ODD\'s own terms', () => {
     'Checked, but the item records no evidence and no commit. ODD treats a checkbox as no proof at all.',
   );
 });
+
+// --- progress-table evidence -----------------------------------------------
+
+const TABLE_TEXT = [
+  '# sample',
+  '',
+  '## Tasks',
+  '',
+  '- [x] T1 Linked',
+  '- [x] T2 Twin',
+  '- [x] T2 Twin again',
+  '',
+  '## Progress',
+  '',
+  '| Task | Checks |',
+  '| --- | --- |',
+  '| T1 | passed |',
+  '| T2 | ambiguous |',
+  '| X9 | nowhere |',
+].join('\n');
+
+test('the body carries the unattached and ambiguous rows, and asks for source labels, when the document has table evidence', () => {
+  const body = buildPanelBody(buildFeatureModel('sample', '/does/not/matter/sample.md', TABLE_TEXT));
+  assert.deepEqual(
+    body.unattachedEvidence.map((r) => r.idCell),
+    ['X9'],
+  );
+  assert.deepEqual(
+    body.ambiguousEvidence.map((r) => r.idCell),
+    ['T2'],
+  );
+  assert.equal(body.labelEvidenceSources, true);
+});
+
+test('a document without a progress table asks for no source labels and carries no document-level rows', () => {
+  const text = ['# sample', '', '## Tasks', '', '- [x] T1 Done', '      Checked by hand.'].join('\n');
+  const body = buildPanelBody(buildFeatureModel('sample', '/does/not/matter/sample.md', text));
+  assert.deepEqual(body.unattachedEvidence, []);
+  assert.deepEqual(body.ambiguousEvidence, []);
+  assert.equal(body.labelEvidenceSources, false);
+});

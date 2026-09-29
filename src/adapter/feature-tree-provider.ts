@@ -18,6 +18,7 @@ import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../do
 import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
 import type { ChecklistCounts, DerivedItemState } from '../domain/derive-checklist-state';
+import { buildEvidencePieces } from '../domain/build-evidence-pieces';
 import { prepareEvidenceMarkdown } from '../domain/prepare-evidence-markdown';
 import { discoverFeatureDocuments } from '../domain/discover-feature-documents';
 import type { DiscoveredFeatureDocument } from '../domain/discover-feature-documents';
@@ -252,7 +253,17 @@ function formatTaskTooltip(model: ItemModel): vscode.MarkdownString {
   const markdown = new vscode.MarkdownString();
   markdown.appendText(formatTaskLabel(model));
 
-  if (model.evidence.trim().length > 0) {
+  if (model.tableEvidence.length > 0) {
+    // Progress-table rows: every piece (inline first, then each row) under
+    // its source, prepared and rendered like any other evidence. A task
+    // with no row takes the unchanged branch below.
+    for (const piece of buildEvidencePieces(model)) {
+      markdown.appendMarkdown('\n\n');
+      markdown.appendText(piece.source);
+      markdown.appendMarkdown('\n\n');
+      markdown.appendMarkdown(piece.markdown);
+    }
+  } else if (model.evidence.trim().length > 0) {
     markdown.appendMarkdown('\n\n');
     // Dedented and rejoined first (prepareEvidenceMarkdown): the raw
     // source carries this document's own checklist-continuation indent

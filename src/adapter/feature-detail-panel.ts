@@ -33,6 +33,9 @@ import type { DerivedItemState } from '../domain/derive-checklist-state';
 import type { ItemModel, SectionModel } from '../domain/build-feature-model';
 import { escapeHtml } from '../domain/escape-html';
 import { STATE_COLOR_TOKEN, themeColorCssVar } from '../domain/state-colors';
+import { buildEvidencePieces, buildRowPiece, INLINE_EVIDENCE_SOURCE } from '../domain/build-evidence-pieces';
+import type { EvidencePiece } from '../domain/build-evidence-pieces';
+import type { TableEvidenceRow } from '../domain/link-progress-evidence';
 import { prepareEvidenceMarkdown } from '../domain/prepare-evidence-markdown';
 import { renderMarkdown } from '../domain/render-markdown';
 
@@ -192,14 +195,49 @@ function formatTaskLine(item: ItemModel): string {
  * content and is rendered as Markdown (see renderProseMarkdown), the same
  * way the tree's own tooltip already renders it.
  */
-function renderTaskEvidence(item: ItemModel): string {
-  if (item.derivedState === 'done-unproven') {
-    return `<pre class="task-evidence task-unproven">${escapeHtml(UNPROVEN_TASK_MESSAGE)}</pre>`;
+function renderTaskEvidence(item: ItemModel, labelSources: boolean): string {
+  if (item.tableEvidence.length === 0) {
+    // No progress-table row: exactly the evidence region this panel has
+    // always rendered, with no source label.
+    if (item.derivedState === 'done-unproven') {
+      return `<pre class="task-evidence task-unproven">${escapeHtml(UNPROVEN_TASK_MESSAGE)}</pre>`;
+    }
+    if (item.evidence.trim().length > 0) {
+      const source = labelSources ? renderEvidenceSource(INLINE_EVIDENCE_SOURCE) : '';
+      return `<div class="task-evidence">${source}${renderProseMarkdown(item.evidence)}</div>`;
+    }
+    return '';
   }
-  if (item.evidence.trim().length > 0) {
-    return `<div class="task-evidence">${renderProseMarkdown(item.evidence)}</div>`;
-  }
-  return '';
+
+  // A task with table rows: the unproven statement still leads when nothing
+  // proves a checked task (its rows say nothing), then every evidence piece
+  // in order (inline first, then the rows), each naming its source. A row
+  // for a task that is not closed is partial evidence and says so.
+  const unproven =
+    item.derivedState === 'done-unproven'
+      ? `<pre class="task-evidence task-unproven">${escapeHtml(UNPROVEN_TASK_MESSAGE)}</pre>`
+      : '';
+  const closed = item.derivedState === 'done' || item.derivedState === 'done-unproven';
+  const pieces = buildEvidencePieces(item)
+    .map((piece) => renderEvidencePiece(piece, !closed && piece.source !== INLINE_EVIDENCE_SOURCE ? PARTIAL_EVIDENCE_NOTE : ''))
+    .join('');
+  return `${unproven}${pieces}`;
+}
+
+/** The small line naming where a piece of evidence came from. The source
+ * is this extension's own label wrapped around document text (a table's
+ * heading), so it is escaped like any other document text. */
+function renderEvidenceSource(source: string, note = ''): string {
+  return `<div class="evidence-source">${escapeHtml(source)}${note ? escapeHtml(note) : ''}</div>`;
+}
+
+const PARTIAL_EVIDENCE_NOTE = ' (partial: the task is not closed)';
+
+/** One source-labelled evidence piece, with an optional note after the
+ * source. The Markdown is already prepared, so it goes straight to the
+ * hardened renderer. */
+function renderEvidencePiece(piece: EvidencePiece, note: string): string {
+  return `<div class="task-evidence">${renderEvidenceSource(piece.source, note)}${renderMarkdown(piece.markdown)}</div>`;
 }
 
 /** Renders one task item. `focusedStartLine` is the currently focused
@@ -210,18 +248,18 @@ function renderTaskEvidence(item: ItemModel): string {
  * duplicate rendering decision". Shared verbatim by the focused-task
  * region above the objective (see renderFocusedTaskRegion) and by this
  * item's own place in its section list, so the two never drift apart. */
-function renderTaskItem(item: ItemModel, focusedStartLine: number | null): string {
+function renderTaskItem(item: ItemModel, focusedStartLine: number | null, labelSources: boolean): string {
   const codiconName = STATE_CODICON[item.derivedState];
   const focusedClass = item.startLine === focusedStartLine ? ' task-item-focused' : '';
   return `
       <div class="task-item task-item-${item.derivedState}${focusedClass}">
         <div class="task-title"><span class="task-glyph codicon codicon-${codiconName}" aria-hidden="true"></span> ${escapeHtml(formatTaskLine(item))}</div>
-        ${renderTaskEvidence(item)}
+        ${renderTaskEvidence(item, labelSources)}
       </div>`;
 }
 
-function renderTaskSection(section: SectionModel, focusedStartLine: number | null): string {
-  const items = section.items.map((item) => renderTaskItem(item, focusedStartLine)).join('');
+function renderTaskSection(section: SectionModel, focusedStartLine: number | null, labelSources: boolean): string {
+  const items = section.items.map((item) => renderTaskItem(item, focusedStartLine, labelSources)).join('');
   return `
     <h2>${escapeHtml(section.heading)}</h2>
     <div class="task-list">${items}</div>`;
@@ -232,7 +270,7 @@ function renderTaskSection(section: SectionModel, focusedStartLine: number | nul
  * evidence, in the same order the tree view renders them. */
 function renderTaskSections(body: PanelBody): string {
   const focusedStartLine = body.focusedTask?.startLine ?? null;
-  return body.taskSections.map((section) => renderTaskSection(section, focusedStartLine)).join('');
+  return body.taskSections.map((section) => renderTaskSection(section, focusedStartLine, body.labelEvidenceSources)).join('');
 }
 
 /**
@@ -249,7 +287,7 @@ function renderTaskSections(body: PanelBody): string {
  * task, and per this feature's absence convention that means the region
  * does not exist, never a blank placeholder.
  */
-function renderFocusedTaskRegion(focusedTask: ItemModel | null): string {
+function renderFocusedTaskRegion(focusedTask: ItemModel | null, labelSources: boolean): string {
   if (!focusedTask) {
     return '';
   }
@@ -259,7 +297,7 @@ function renderFocusedTaskRegion(focusedTask: ItemModel | null): string {
   return `
     <div class="focused-task">
       <div class="focused-task-label">→ FOCUSED TASK</div>
-      ${renderTaskItem(focusedTask, focusedTask.startLine)}
+      ${renderTaskItem(focusedTask, focusedTask.startLine, labelSources)}
       ${commit}
     </div>`;
 }
@@ -279,8 +317,32 @@ function renderOtherSections(body: PanelBody): string {
   return body.otherSections.map(renderOtherSection).join('');
 }
 
+/** One progress-table row that belongs to no single task, with its source
+ * and, for an ambiguous row, why it is linked to none. */
+function renderDocumentEvidenceRow(row: TableEvidenceRow): string {
+  const note = row.matchCount > 1 ? ` — Ambiguous: "${row.idCell}" matches ${row.matchCount} tasks, linked to none` : '';
+  return `
+      <div class="task-item">
+        <div class="task-title">${escapeHtml(row.idCell || '(no task ID)')}</div>
+        ${renderEvidencePiece(buildRowPiece(row), note)}
+      </div>`;
+}
+
+/** The document-level evidence region: table rows that link to no single
+ * task, unattached (no task has that ID) or ambiguous (more than one
+ * does), in document order. Absent when there are none. */
+function renderDocumentEvidence(body: PanelBody): string {
+  const rows = [...body.unattachedEvidence, ...body.ambiguousEvidence].sort((a, b) => a.line - b.line);
+  if (rows.length === 0) {
+    return '';
+  }
+  return `
+    <h2>Evidence not linked to a task</h2>
+    <div class="task-list">${rows.map(renderDocumentEvidenceRow).join('')}</div>`;
+}
+
 function renderPanelBody(body: PanelBody): string {
-  return `${renderFocusedTaskRegion(body.focusedTask)}${renderObjective(body)}${renderTaskSections(body)}${renderOtherSections(body)}`;
+  return `${renderFocusedTaskRegion(body.focusedTask, body.labelEvidenceSources)}${renderObjective(body)}${renderTaskSections(body)}${renderDocumentEvidence(body)}${renderOtherSections(body)}`;
 }
 
 /**
@@ -642,6 +704,11 @@ function renderHtml(
     word-break: break-word;
     margin: 2px 0 0 1.6em;
     color: var(--vscode-descriptionForeground);
+  }
+  .evidence-source {
+    font-size: 0.85em;
+    font-style: italic;
+    margin-bottom: 2px;
   }
   .task-unproven {
     white-space: pre-wrap;
