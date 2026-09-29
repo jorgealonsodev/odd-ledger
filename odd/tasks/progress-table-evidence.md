@@ -78,6 +78,11 @@ different formats:
 - Slice boundaries: PR1 = T1 (1abda48, 8603f39); PR2 = T2 (1bfb633, 35189e8);
   PR3 = T3 (cae1186, ce8189a); PR4 = T4 + T5 (5ec319c, 43a592f, a8bd475 and its doc commit).
 - RDD: on (global). Review candidate = work-unit commit / slice.
+- PR chain (stacked-to-main, opened 2026-09-29; merge in order with merge commits, retarget the next PR to `main` after each merge):
+  - PR1 #5 https://github.com/jorgealonsodev/odd-ledger/pull/5 (`feat/progress-table-evidence-1-parse` -> `main`)
+  - PR2 #6 https://github.com/jorgealonsodev/odd-ledger/pull/6 (`feat/progress-table-evidence-2-link` -> PR1 branch)
+  - PR3 #7 https://github.com/jorgealonsodev/odd-ledger/pull/7 (`feat/progress-table-evidence-3-panel` -> PR2 branch)
+  - PR4 #8 https://github.com/jorgealonsodev/odd-ledger/pull/8 (`feat/progress-table-evidence` -> PR3 branch)
 
 ## Tasks
 
