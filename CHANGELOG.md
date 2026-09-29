@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 Reads evidence recorded in a **progress table**, so a document that keeps one row per task
 no longer shows every closed task as done but unproven, and needs no second copy of the
