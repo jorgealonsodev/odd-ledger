@@ -13,8 +13,8 @@ evidence under each checkbox.
   links to `E5-5`). A task can have several rows. A row matching no task is shown at
   document level and counted toward no task; a row matching several (duplicate IDs) is
   named as ambiguous and linked to none.
-- A row proves a checked task only when a cell other than the ID holds something that is not
-  empty or just a dash. An empty row leaves the task unproven; a row for an open task never
+- A row proves a checked task only when a cell other than the ID and the `Route` column holds
+  something that is not empty, a dash, or a bare `pending` / `n/a` / `tbd`. An empty row leaves the task unproven; a row for an open task never
   changes its state.
 - The commit shown comes from a `Commit` column (else the first commit-like token in the
   row); a `Route` column supplies the task's route. Inline evidence still counts and is

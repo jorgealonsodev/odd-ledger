@@ -196,3 +196,8 @@ test('a document without any table yields none', () => {
   assert.deepEqual(parseProgressTables('# T\n\n## Evidence\n\njust prose\n'), []);
   assert.deepEqual(parseProgressTables(''), []);
 });
+
+test('an H1 closes the evidence heading above it: a table after it is not evidence', () => {
+  const text = '## Evidence\n\n# Title\n\n| Task | A |\n| --- | --- |\n| T1 | x |\n';
+  assert.equal(parseProgressTables(text).length, 0);
+});

@@ -188,3 +188,24 @@ test('a task without an ID is never a link target', () => {
   const linked = link('| Task | X |\n| --- | --- |\n| Overall summary | a |', [{ id: null, startLine: 1 }]);
   assert.equal(linked.unattached.length, 1);
 });
+
+test('the Route column is not evidence: a row with only an ID and a route leaves the task unproven', () => {
+  const linked = link('| Task | Route | Commit |\n| --- | --- | --- |\n| E1-4 | delegated | — |', TASKS);
+  assert.equal(linked.provenStartLines.size, 0);
+  assert.equal(linked.byTask.get(10)![0].proves, false);
+  assert.equal(linked.byTask.get(10)![0].route, 'delegated', 'the route is still shown');
+});
+
+test('a bare pending marker is not evidence, whatever its case or emphasis', () => {
+  for (const marker of ['pending', 'Pending', '**PENDING**', 'n/a', 'N/A', 'tbd', 'TBD', '_tbd_', '–']) {
+    const linked = link(`| Task | Route | Review |\n| --- | --- | --- |\n| E1-4 | delegated | ${marker} |`, TASKS);
+    assert.equal(linked.provenStartLines.size, 0, `"${marker}" must not prove`);
+  }
+});
+
+test('a route plus a commit proves, and a review cell with real text proves', () => {
+  const withCommit = link('| Task | Route | Commit |\n| --- | --- | --- |\n| E1-4 | delegated | 7020bc6 |', TASKS);
+  assert.deepEqual([...withCommit.provenStartLines], [10]);
+  const withReview = link('| Task | Route | Review |\n| --- | --- | --- |\n| E1-4 | delegated | approved |', TASKS);
+  assert.deepEqual([...withReview.provenStartLines], [10]);
+});

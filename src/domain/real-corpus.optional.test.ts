@@ -23,10 +23,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseDocumentStructure } from './parse-document-structure';
+import { parseDocumentStructure, splitLines } from './parse-document-structure';
 import { parseChecklist } from './parse-checklist';
 import { deriveChecklistState } from './derive-checklist-state';
 import { buildFeatureModel } from './build-feature-model';
+import { parseProgressTables } from './parse-progress-tables';
 
 const REAL_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_CORPUS_DIR';
 
@@ -74,28 +75,20 @@ test('the real ODD documents on this machine parse without throwing (opt-in, loc
  */
 const REAL_TABLE_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_TABLE_CORPUS_DIR';
 
-/** The document without its progress-table sections: every line from a
- * heading that starts with `progress` or `evidence` up to the next heading
- * of the same or a higher level. */
+/** The document without the progress tables the parser itself reports: the
+ * lines from each table's header row to its last row. Reusing the parser's
+ * detection keeps heading rules (slugs, emphasis, the title) and fenced code
+ * exactly as the ledger reads them. */
 function withoutProgressTables(text: string): string {
-  const kept: string[] = [];
-  let skippingLevel: number | null = null;
-  for (const line of text.split(/\r\n|\r|\n/)) {
-    const heading = /^(#{1,6})\s+(.*)$/.exec(line);
-    if (heading) {
-      const level = heading[1].length;
-      if (skippingLevel !== null && level <= skippingLevel) {
-        skippingLevel = null;
-      }
-      if (skippingLevel === null && /^(progress|evidence)/i.test(heading[2].trim())) {
-        skippingLevel = level;
-      }
-    }
-    if (skippingLevel === null) {
-      kept.push(line);
+  const lines = splitLines(text);
+  const drop = new Set<number>();
+  for (const table of parseProgressTables(text)) {
+    const last = table.rows.length > 0 ? table.rows[table.rows.length - 1].line : table.headerLine + 1;
+    for (let line = table.headerLine; line <= last; line++) {
+      drop.add(line);
     }
   }
-  return kept.join('\n');
+  return lines.filter((_, index) => !drop.has(index + 1)).join('\n');
 }
 
 test('real table-format documents read every closed task as proven, and unproven again without the table (opt-in, local only)', (t) => {

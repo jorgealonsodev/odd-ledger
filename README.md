@@ -26,7 +26,8 @@ repeat the very claim the document failed to back up.
 Evidence can be written under the checkbox, or in a **progress table** with one row per
 task (first column the task ID, under a `Progress` or `Evidence` heading). Both are read,
 and both can appear in one document. A table row counts only when it actually says
-something: a row of empty cells or dashes proves nothing, and a row for an open task never
+something: a row of empty cells, dashes or a bare `pending` proves nothing (a `Route` cell
+alone does not count), and a row for an open task never
 changes its state. The panel names where each piece of evidence came from, and shows any
 row that matches no task, or more than one, instead of dropping it.
 
