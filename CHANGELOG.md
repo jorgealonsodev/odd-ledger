@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+Reads evidence recorded as a **progress list**, so a document that logs one bullet per task
+under its progress heading no longer shows those closed tasks as done but unproven.
+
+- A progress list is the top-level bullets or numbered items under a heading starting with
+  `progress` or `evidence` (the same scope as a progress table; the document title never
+  opens one, and a table and a list can share a section). An entry includes its indented
+  and nested lines, up to the next top-level item, heading, table or fenced block.
+- An entry links to a task when its first word, without emphasis or backticks and without a
+  trailing `:`, `,`, `—` or `–`, is exactly the task ID. A range (`T0.1–T0.6b`) or an ID
+  list (`T1, T2`) is never expanded. An entry that names no task is shown at document level
+  as a note and counted toward no task; a duplicated ID is named as ambiguous and linked to
+  none.
+- An entry proves a checked task only when something remains after the ID and one leading
+  status word (`done`, `closed`, `complete`, `finished`, `pending`, `in progress`, `wip`,
+  `todo`, `blocked`): `- T0.1 done` alone stays unproven, `- T0.1 done: commit \`a9526b1\``
+  proves. An entry for an open task never changes its state. The commit shown is the first
+  commit-like token in the entry.
+- Evidence reads inline first, then table rows, then list entries, each naming its source
+  (`list "<heading>", item N`). Entries render through the same hardened Markdown path as
+  every other evidence: raw HTML escaped, images off, same link allow-list.
+- A document without a progress list reads exactly as in 1.2.0.
+
 ## 1.2.0
 
 Reads evidence recorded in a **progress table**, so a document that keeps one row per task

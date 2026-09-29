@@ -106,3 +106,45 @@ test('raw HTML in a header cell is escaped too', () => {
   const [piece] = buildEvidencePieces(task(text, 'T1'));
   assert.ok(!renderMarkdown(piece.markdown).includes('<b onclick'));
 });
+
+const LIST_DOC = [
+  '# F',
+  '',
+  '## Tasks',
+  '',
+  '- [x] T1 First',
+  '      Inline note.',
+  '',
+  '## Progress',
+  '',
+  '| Task | Commit |',
+  '| --- | --- |',
+  '| T1 | aaaa111 |',
+  '',
+  '- T1 done: `bbbb222`',
+  '  - nested check: 12 passed',
+].join('\n');
+
+test('a list entry renders its text as a list item, nested lines kept nested', () => {
+  const t = task(LIST_DOC, 'T1');
+  const markdown = formatEvidenceRowMarkdown(t.tableEvidence[1]);
+  assert.equal(markdown, '- done: `bbbb222`\n  - nested check: 12 passed');
+});
+
+test('evidence order is inline, table rows, list entries, each with its source', () => {
+  const pieces = buildEvidencePieces(task(LIST_DOC, 'T1'));
+  assert.deepEqual(
+    pieces.map((p) => p.source),
+    [INLINE_EVIDENCE_SOURCE, 'table "Progress", row 1', 'list "Progress", item 1'],
+  );
+});
+
+test('raw HTML and images in a list entry are neutralised by the shared render path', () => {
+  const text = ['# F', '', '## Tasks', '', '- [x] T1 First', '', '## Progress', '', '- T1 done: <script>alert(1)</script> ![x](https://example.com/y.png) [a](javascript:alert(2))'].join('\n');
+  const [piece] = buildEvidencePieces(task(text, 'T1'));
+  const html = renderMarkdown(piece.markdown);
+  assert.ok(!html.includes('<script>'), html);
+  assert.match(html, /&lt;script&gt;/);
+  assert.ok(!/<img\b/i.test(html), html);
+  assert.ok(!/href\s*=\s*"javascript:/i.test(html), html);
+});

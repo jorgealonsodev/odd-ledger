@@ -23,13 +23,15 @@ section or a feature turns green only when everything under it is closed *and* p
 unproven task withholds the green from its whole group, because going green there would
 repeat the very claim the document failed to back up.
 
-Evidence can be written under the checkbox, or in a **progress table** with one row per
-task (first column the task ID, under a `Progress` or `Evidence` heading). Both are read,
-and both can appear in one document. A table row counts only when it actually says
-something: a row of empty cells, dashes or a bare `pending` proves nothing (a `Route` cell
-alone does not count), and a row for an open task never
-changes its state. The panel names where each piece of evidence came from, and shows any
-row that matches no task, or more than one, instead of dropping it.
+Evidence can be written under the checkbox, in a **progress table** with one row per task
+(first column the task ID, under a `Progress` or `Evidence` heading), or as a **progress
+list** under the same heading, one bullet per task starting with its ID
+(`- T0.1 done: commit \`a9526b1\``). All three are read equally, and all can appear in one
+document. A table row or list entry counts only when it actually says something: a row of
+empty cells, dashes or a bare `pending` proves nothing (a `Route` cell alone does not
+count), a bullet such as `- T0.1 done` is only an echo of the tick, and an entry for an
+open task never changes its state. The panel names where each piece of evidence came from,
+and shows any row or bullet that matches no task, or more than one, instead of dropping it.
 
 The same rule governs silence. A field your document does not record is stated as **not
 recorded**, never drawn as a zero and never left blank, because a blank and a zero both
@@ -86,6 +88,13 @@ There is nothing to configure. The extension contributes no settings.
 - A progress table is read only under a heading that starts with `progress` or `evidence`,
   and only when its first column header is `Task`, `ID`, `Task ID` or `Tarea`. Any other
   table, such as scope or risks, is never treated as proof.
+- A progress list is read under the same headings: each top-level bullet (or numbered item)
+  is one entry, with its indented and nested lines. It links to a task only when its first
+  word, without emphasis, backticks or a trailing `:` / `,` / `—`, is exactly a task ID. A
+  range (`T0.1–T0.6b`) or an ID list (`T1, T2`) is never expanded, so such a bullet is shown
+  as a note and proves nothing. A bullet proves a checked task only when, after the ID and
+  one status word (`done`, `pending`, `wip`, ...), it still says something. Checkbox items
+  in that section are tasks, not evidence.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.
 - Creation-date lookups never run more than 4 at once. A project with many undated

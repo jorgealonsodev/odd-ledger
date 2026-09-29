@@ -14,8 +14,14 @@
  * rows, CRLF endings, and several tables in one document. A table inside a
  * fenced code block is an example, not a table.
  *
- * This module only reads the table. Which task a row belongs to, and what
- * it proves, is decided in link-progress-evidence.ts. Plain string
+ * The same headings scope a second evidence format, the progress list: each
+ * top-level list item under them is one entry (see parseProgressLists). A
+ * table and a list may share a section. Both are read in one pass, so the
+ * heading scope, the title rule and the fenced-code skipping are one piece
+ * of logic, not two.
+ *
+ * This module only reads the table or list. Which task a row or entry
+ * belongs to, and what it proves, is decided in link-progress-evidence.ts. Plain string
  * processing over already-read text, same boundary as the rest of
  * src/domain/.
  */
@@ -47,6 +53,29 @@ export interface ProgressTable {
   /** The header cells with emphasis and code markers stripped. */
   readonly headers: string[];
   readonly rows: ProgressTableRow[];
+}
+
+/** One top-level list item under a progress or evidence heading, with its
+ * continuation and nested lines. */
+export interface ProgressListEntry {
+  /** The text of the heading that scopes the entry as evidence. */
+  readonly heading: string;
+  readonly headingLine: number;
+  /** 1-based index among the top-level items under that heading, as a
+   * reader counts them (table rows and prose do not count). */
+  readonly item: number;
+  /** 1-based line number of the item's first line in the document. */
+  readonly line: number;
+  /** The item's text without its list marker: the first line, then each
+   * continuation or nested line with the marker's own indent removed,
+   * joined by newlines. */
+  readonly text: string;
+}
+
+/** Everything a progress heading scopes: its tables and its list entries. */
+export interface ProgressEvidence {
+  readonly tables: ProgressTable[];
+  readonly lists: ProgressListEntry[];
 }
 
 const TASK_HEADER_ALIASES: ReadonlySet<string> = new Set(['task', 'id', 'task id', 'tarea']);
@@ -191,12 +220,51 @@ function findEvidenceHeading(stack: readonly OpenHeading[]): OpenHeading | undef
   return undefined;
 }
 
+/** A top-level list marker: `-`, `*`, `+`, `1.` or `1)`, then its text. */
+const LIST_ITEM_RE = /^( {0,3})([-*+]|\d{1,9}[.)])[ \t]+(\S.*)$/;
+
+/** A checkbox item is a task, not an evidence entry. */
+const CHECKBOX_RE = /^\[[ xX]\](?:\s|$)/;
+
+/** A list entry being collected: its first line's facts and its lines. */
+interface OpenEntry {
+  readonly heading: OpenHeading;
+  readonly item: number;
+  readonly line: number;
+  readonly indentWidth: number;
+  readonly lines: string[];
+}
+
 /**
- * Reads every progress table in `text`, in document order.
+ * Reads every progress table and progress list entry in `text`, in
+ * document order.
+ *
+ * An entry is a top-level list item under an evidence heading, plus every
+ * line up to the next top-level item, heading, table or fenced block, or a
+ * blank line followed by a non-indented line that is not a list item.
+ * Checkbox items are tasks, so they are never entries.
  */
-export function parseProgressTables(text: string): ProgressTable[] {
+export function parseProgressEvidence(text: string): ProgressEvidence {
   const lines = splitLines(text);
   const tables: ProgressTable[] = [];
+  const lists: ProgressListEntry[] = [];
+  const itemCounts = new Map<number, number>();
+  let open: OpenEntry | null = null;
+  let blankPending = 0;
+
+  const flush = (): void => {
+    if (open) {
+      lists.push({
+        heading: open.heading.text,
+        headingLine: open.heading.line,
+        item: open.item,
+        line: open.line,
+        text: open.lines.join('\n'),
+      });
+    }
+    open = null;
+    blankPending = 0;
+  };
   const headings: OpenHeading[] = [];
   let titleSeen = false;
 
@@ -217,6 +285,7 @@ export function parseProgressTables(text: string): ProgressTable[] {
 
     const fenceOpen = FENCE_OPEN_RE.exec(line);
     if (fenceOpen && hasClosingFence(lines, i + 1, fenceOpen[1][0], fenceOpen[1].length)) {
+      flush();
       inFence = true;
       fenceChar = fenceOpen[1][0];
       fenceLen = fenceOpen[1].length;
@@ -225,6 +294,7 @@ export function parseProgressTables(text: string): ProgressTable[] {
 
     const headingMatch = HEADING_RE.exec(line);
     if (headingMatch) {
+      flush();
       const level = headingMatch[1].length;
       while (headings.length > 0 && headings[headings.length - 1].level >= level) {
         headings.pop();
@@ -240,9 +310,40 @@ export function parseProgressTables(text: string): ProgressTable[] {
     }
 
     if (!line.includes('|') || i + 1 >= lines.length || !isDelimiterRow(lines[i + 1])) {
+      const scope = findEvidenceHeading(headings);
+      if (!scope) {
+        continue;
+      }
+      if (line.trim() === '') {
+        if (open) {
+          blankPending++;
+        }
+        continue;
+      }
+      const item = LIST_ITEM_RE.exec(line);
+      const indent = /^[ \t]*/.exec(line)?.[0].length ?? 0;
+      if (item && (indent === 0 || (open === null && indent <= 3))) {
+        flush();
+        const count = (itemCounts.get(scope.line) ?? 0) + 1;
+        itemCounts.set(scope.line, count);
+        if (!CHECKBOX_RE.test(item[3])) {
+          const markerWidth = item[1].length + item[2].length + (/^[ \t]*/.exec(line.slice(item[1].length + item[2].length))?.[0].length ?? 1);
+          open = { heading: scope, item: count, line: i + 1, indentWidth: markerWidth, lines: [item[3].trimEnd()] };
+        }
+      } else if (open) {
+        if (blankPending > 0 && indent === 0) {
+          flush();
+        } else {
+          for (; blankPending > 0; blankPending--) {
+            open.lines.push('');
+          }
+          open.lines.push(line.replace(new RegExp(`^[ \\t]{0,${open.indentWidth}}`), '').trimEnd());
+        }
+      }
       continue;
     }
 
+    flush();
     const rawHeaders = splitCells(line);
     const scope = findEvidenceHeading(headings);
     if (rawHeaders.length === 0 || !isTaskHeader(rawHeaders[0]) || !scope) {
@@ -272,5 +373,16 @@ export function parseProgressTables(text: string): ProgressTable[] {
     i = j - 1;
   }
 
-  return tables;
+  flush();
+  return { tables, lists };
+}
+
+/** Reads every progress table in `text`, in document order. */
+export function parseProgressTables(text: string): ProgressTable[] {
+  return parseProgressEvidence(text).tables;
+}
+
+/** Reads every progress list entry in `text`, in document order. */
+export function parseProgressLists(text: string): ProgressListEntry[] {
+  return parseProgressEvidence(text).lists;
 }

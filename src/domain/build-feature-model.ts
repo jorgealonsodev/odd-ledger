@@ -17,7 +17,7 @@ import { deriveChecklistState } from './derive-checklist-state';
 import { linkProgressEvidence } from './link-progress-evidence';
 import type { TableEvidenceRow } from './link-progress-evidence';
 import { parseChecklist } from './parse-checklist';
-import { parseProgressTables } from './parse-progress-tables';
+import { parseProgressEvidence } from './parse-progress-tables';
 import type { DocumentSection, DocumentStructure, SectionKind } from './parse-document-structure';
 import { parseDocumentStructure } from './parse-document-structure';
 import { unwrapLines } from './unwrap-wrapped-lines';
@@ -58,6 +58,8 @@ export interface ItemModel {
   readonly endLine: number;
   readonly evidence: string;
   readonly route: string | null;
+  /** Progress evidence linked to this task: table rows, then list entries,
+   * in document order. The name predates progress lists. */
   readonly tableEvidence: readonly TableEvidenceRow[];
 }
 
@@ -223,13 +225,15 @@ export function buildFeatureModel(featureName: string, documentPath: string, tex
   const structure = parseDocumentStructure(text);
   const checklistSections = parseChecklist(text, structure.sections);
 
-  // Progress tables are linked to tasks before deriving state, because a
+  // Progress tables and lists are linked to tasks before deriving state, because a
   // row that proves a task is what keeps its tick from reading unproven.
   // The next-step section owns no tasks (see the filter below), so its
   // items are not link targets.
+  const evidence = parseProgressEvidence(text);
   const linked = linkProgressEvidence(
-    parseProgressTables(text),
+    evidence.tables,
     checklistSections.filter((s) => s.kind !== 'next-step').flatMap((s) => s.items),
+    evidence.lists,
   );
   const derived = deriveChecklistState(checklistSections, linked.provenStartLines);
 

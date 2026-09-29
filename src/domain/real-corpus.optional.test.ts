@@ -27,7 +27,7 @@ import { parseDocumentStructure, splitLines } from './parse-document-structure';
 import { parseChecklist } from './parse-checklist';
 import { deriveChecklistState } from './derive-checklist-state';
 import { buildFeatureModel } from './build-feature-model';
-import { parseProgressTables } from './parse-progress-tables';
+import { parseProgressLists, parseProgressTables } from './parse-progress-tables';
 
 const REAL_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_CORPUS_DIR';
 
@@ -120,5 +120,55 @@ test('real table-format documents read every closed task as proven, and unproven
       'expected every closed task to be unproven again once the table is removed',
     );
     assert.equal(withoutTable.progress.done, withTable.progress.done, 'removing the table must not change which tasks are closed');
+  }
+});
+
+/**
+ * A third opt-in: a directory of real documents that record their evidence
+ * as a progress list. Only counts are asserted: the ledger must read at
+ * least one closed task as proven through a list entry, and must read fewer
+ * closed tasks as proven again once the entries are ignored (the same
+ * document with its progress lists removed from the text).
+ */
+const REAL_LIST_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_LIST_CORPUS_DIR';
+
+function withoutProgressLists(text: string): string {
+  const lines = splitLines(text);
+  const drop = new Set<number>();
+  for (const entry of parseProgressLists(text)) {
+    const count = entry.text.split('\n').length;
+    for (let line = entry.line; line < entry.line + count; line++) {
+      drop.add(line);
+    }
+  }
+  return lines.filter((_, index) => !drop.has(index + 1)).join('\n');
+}
+
+test('real list-format documents read closed tasks as proven through their entries (opt-in, local only)', (t) => {
+  const dir = process.env[REAL_LIST_CORPUS_DIR_ENV];
+
+  if (!dir || !existsSync(dir)) {
+    t.skip(
+      `${REAL_LIST_CORPUS_DIR_ENV} is not set, or does not point to an existing directory; ` +
+        'skipping the real list-format check. Set it to a local directory of *.md documents ' +
+        'that record their evidence as a progress list. Expected and correct on any other machine, including CI.',
+    );
+    return;
+  }
+
+  const files = readdirSync(dir).filter((name) => name.endsWith('.md') && statSync(join(dir, name)).isFile());
+  assert.ok(files.length > 0, `${REAL_LIST_CORPUS_DIR_ENV} is set to a directory with no .md files in it`);
+
+  for (const file of files) {
+    const text = readFileSync(join(dir, file), 'utf8');
+
+    const withLists = buildFeatureModel('real', join(dir, file), text);
+    const withoutLists = buildFeatureModel('real', join(dir, file), withoutProgressLists(text));
+    assert.ok(withLists.progress.done > 0, 'expected the document to have closed tasks');
+    assert.equal(withLists.progress.done, withoutLists.progress.done, 'ignoring the lists must not change which tasks are closed');
+    assert.ok(
+      withLists.progress.doneUnproven < withoutLists.progress.doneUnproven,
+      'expected list entries to prove closed tasks that read unproven without them',
+    );
   }
 });
