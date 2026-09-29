@@ -110,12 +110,12 @@ const HEADING_ALIASES: ReadonlyMap<string, SectionKind> = new Map([
 
 /** Matches an ATX heading line (up to 3 leading spaces, 1-6 `#`, then
  * either end of line or a space and the heading text). */
-const HEADING_RE = /^ {0,3}(#{1,6})(?:\s(.*))?$/;
+export const HEADING_RE = /^ {0,3}(#{1,6})(?:\s(.*))?$/;
 
 /** Matches the start of a fenced code block: 3+ backticks or 3+ tildes,
  * optionally indented up to 3 spaces. An opening fence may carry an info
  * string (e.g. ```bash); a closing fence must not. */
-const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})/;
+export const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})/;
 
 function normalizeForMatch(headingText: string): string {
   return headingText
@@ -128,12 +128,12 @@ function matchHeadingKind(rawHeadingText: string): SectionKind | null {
   return HEADING_ALIASES.get(normalizeForMatch(rawHeadingText)) ?? null;
 }
 
-function stripAtxClosingSequence(text: string): string {
+export function stripAtxClosingSequence(text: string): string {
   return text.replace(/\s+#+\s*$/, '').trim();
 }
 
 /** Splits document text into lines, tolerating CRLF, LF, and lone CR. */
-function splitLines(text: string): string[] {
+export function splitLines(text: string): string[] {
   if (text.length === 0) {
     return [];
   }
@@ -165,7 +165,7 @@ function splitLines(text: string): string[] {
  * own headings, as this corpus does) parses exactly as before: this only
  * ever changes behavior for a fence that truly never closes.
  */
-function hasClosingFence(lines: readonly string[], fromIndex: number, fenceChar: string, fenceLen: number): boolean {
+export function hasClosingFence(lines: readonly string[], fromIndex: number, fenceChar: string, fenceLen: number): boolean {
   for (let i = fromIndex; i < lines.length; i++) {
     const trimmed = lines[i].trim();
     const match = /^(`{3,}|~{3,})$/.exec(trimmed);
