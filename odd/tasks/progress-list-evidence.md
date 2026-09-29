@@ -79,7 +79,7 @@ list is as unambiguous as a table row.
 
 ## Tasks
 
-- [ ] T1 Domain: parse progress list entries under progress/evidence headings, link them to tasks, derive evidence/commit, honesty rules, merge with inline and table evidence; source labels; panel/tree show list evidence and notes.
+- [x] T1 Domain: parse progress list entries under progress/evidence headings, link them to tasks, derive evidence/commit, honesty rules, merge with inline and table evidence; source labels; panel/tree show list evidence and notes.
 - [ ] T2 Release 1.2.1: README/CHANGELOG, version bump, merge, tag, GitHub release with vsix.
 
 ## Acceptance criteria
@@ -96,7 +96,8 @@ list is as unambiguous as a table row.
 
 | Task | Route + trigger | Commit | Checks | Review tier/outcome |
 | --- | --- | --- | --- | --- |
+| T1 | delegated writer (writer trigger: parser, linker, model, panel and tree tests) | `abcf10e` | RED: compile error (missing `parseProgressLists`, `listSourceLabel`, 3-arg `linkProgressEvidence`) then GREEN test:domain 453 pass / 0 fail (2 opt-in skips), test:extension 148 + 27 pass, check-types and compile clean, test:package 18 pass; real-document probe: done 30, doneUnproven 5 (was 28) | pending assess |
 
 ## Next step
 
-T1 — delegated writer (writer trigger: parser, linker, model and panel files).
+T2 — release 1.2.1 (parent).
