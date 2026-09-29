@@ -189,6 +189,7 @@ function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: numbe
 /** A leading status word an entry may carry before its real content. */
 const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
 const LEADING_SEPARATOR_RE = /^[\s:,—–-]+/;
+const TRAILING_PUNCTUATION_RE = /[\s.!?;:,…]+$/u;
 const TRAILING_ID_PUNCTUATION_RE = /[:,—–_]+$/;
 const ENTRY_TOKEN_RE = /^[\s*_`]*([^\s*`]+)[*`_]*/;
 
@@ -220,9 +221,10 @@ function readEntryHead(text: string, byId: ReadonlyMap<string, number[]>): Entry
 
 /** Whether what an entry says after its ID proves anything: something is
  * left once one leading status word is removed, and it is not a dash or a
- * bare placeholder. */
+ * bare placeholder. Trailing punctuation left by a bare status word
+ * (`done.`, `done!`) is not content. */
 function entryProves(rest: string): boolean {
-  const withoutStatus = stripInlineMarkup(rest).replace(STATUS_WORD_RE, '').replace(LEADING_SEPARATOR_RE, '');
+  const withoutStatus = stripInlineMarkup(rest).replace(STATUS_WORD_RE, '').replace(LEADING_SEPARATOR_RE, '').replace(TRAILING_PUNCTUATION_RE, '');
   return !isBlankCell(withoutStatus);
 }
 

@@ -96,11 +96,21 @@ test('an entry with no commit-like token has commit null', () => {
 
 test('a status word alone does not prove: "- T1 done" and its siblings', () => {
   for (const word of ['done', 'DONE', 'Closed', 'complete', 'completed', 'finished', 'pending', 'in progress', 'wip', 'todo', 'blocked']) {
-    for (const line of [`- T1 ${word}`, `- T1 ${word}:`, `- T1: ${word}.`.replace('.', ''), `- **T1** ${word}`]) {
+    for (const line of [`- T1 ${word}`, `- T1 ${word}:`, `- T1: ${word}`, `- **T1** ${word}`]) {
       const linked = link(line);
       assert.equal(linked.byTask.get(10)?.length, 1, line);
       assert.equal(linked.provenStartLines.has(10), false, line);
       assert.equal(linked.byTask.get(10)?.[0].proves, false, line);
+    }
+  }
+});
+
+test('a status word followed only by trailing punctuation does not prove', () => {
+  for (const word of ['done', 'pending', 'in progress', 'wip']) {
+    for (const mark of ['.', '!', ';', ':', ' .', '. !', '…']) {
+      const line = `- T1 ${word}${mark}`;
+      assert.equal(link(line).provenStartLines.has(10), false, line);
+      assert.equal(link(`- T1: ${word}${mark}`).provenStartLines.has(10), false, `- T1: ${word}${mark}`);
     }
   }
 });

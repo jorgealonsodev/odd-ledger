@@ -93,8 +93,10 @@ There is nothing to configure. The extension contributes no settings.
   word, without emphasis, backticks or a trailing `:` / `,` / `—`, is exactly a task ID. A
   range (`T0.1–T0.6b`) or an ID list (`T1, T2`) is never expanded, so such a bullet is shown
   as a note and proves nothing. A bullet proves a checked task only when, after the ID and
-  one status word (`done`, `pending`, `wip`, ...), it still says something. Checkbox items
-  in that section are tasks, not evidence.
+  one status word (`done`, `pending`, `wip`, ...), it still says something: `- T1 done.` or
+  `- T1 done!` proves nothing. Checkbox items in that section are tasks, not evidence, and are
+  not counted in the item numbers of the source labels. A thematic break (`---`, `* * *`) is
+  never an entry and ends the one above it.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.
 - Creation-date lookups never run more than 4 at once. A project with many undated

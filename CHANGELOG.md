@@ -23,6 +23,10 @@ under its progress heading no longer shows those closed tasks as done but unprov
   (`list "<heading>", item N`). Entries render through the same hardened Markdown path as
   every other evidence: raw HTML escaped, images off, same link allow-list.
 - A document without a progress list reads exactly as in 1.2.0.
+- Fixed while hardening the list reader: a bare status word followed by punctuation
+  (`- T1 done.`, `done!`, `done;`) no longer proves the task; thematic breaks (`* * *`,
+  `- - -`, `---`) are not entries and end the current entry; checkbox items no longer consume
+  an item number in the `list "<heading>", item N` labels.
 
 ## 1.2.0
 

@@ -96,6 +96,23 @@ test('checkbox items are tasks, not evidence entries', () => {
   assert.deepEqual(parseProgressLists(doc).map((l) => l.text), ['T3 done: aaaa111']);
 });
 
+test('checkbox items do not consume an item number', () => {
+  const doc = `${HEAD}- [x] T1 a task\n- [ ] T2 another\n- T3 done: aaaa111\n- T4 done: bbbb222\n`;
+  assert.deepEqual(parseProgressLists(doc).map((l) => [l.text, l.item]), [
+    ['T3 done: aaaa111', 1],
+    ['T4 done: bbbb222', 2],
+  ]);
+});
+
+test('thematic breaks are not entries and end the current entry', () => {
+  for (const hr of ['* * *', '- - -', '***', '---', '___', '_ _ _', '  ***', '-----']) {
+    const doc = `${HEAD}- T1 done: aaaa111\n${hr}\n- T2 done: bbbb222\n`;
+    const lists = parseProgressLists(doc);
+    assert.deepEqual(lists.map((l) => [l.text, l.item]), [['T1 done: aaaa111', 1], ['T2 done: bbbb222', 2]], hr);
+  }
+  assert.deepEqual(parseProgressLists(`${HEAD}* * *\n- - -\n`), []);
+});
+
 test('item numbers restart under each evidence heading', () => {
   const doc = '## Progress\n\n- a1\n- b2\n\n## Evidence\n\n- c3\n';
   assert.deepEqual(parseProgressLists(doc).map((l) => [l.heading, l.item]), [

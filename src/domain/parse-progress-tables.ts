@@ -62,7 +62,8 @@ export interface ProgressListEntry {
   readonly heading: string;
   readonly headingLine: number;
   /** 1-based index among the top-level items under that heading, as a
-   * reader counts them (table rows and prose do not count). */
+   * reader counts them (table rows, prose and checkbox items do not
+   * count). */
   readonly item: number;
   /** 1-based line number of the item's first line in the document. */
   readonly line: number;
@@ -223,6 +224,10 @@ function findEvidenceHeading(stack: readonly OpenHeading[]): OpenHeading | undef
 /** A top-level list marker: `-`, `*`, `+`, `1.` or `1)`, then its text. */
 const LIST_ITEM_RE = /^( {0,3})([-*+]|\d{1,9}[.)])[ \t]+(\S.*)$/;
 
+/** A thematic break (`* * *`, `- - -`, `***`, `---`, `___`): never an entry,
+ * and it ends the entry above it. */
+const THEMATIC_BREAK_RE = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+
 /** A checkbox item is a task, not an evidence entry. */
 const CHECKBOX_RE = /^\[[ xX]\](?:\s|$)/;
 
@@ -320,13 +325,17 @@ export function parseProgressEvidence(text: string): ProgressEvidence {
         }
         continue;
       }
+      if (THEMATIC_BREAK_RE.test(line)) {
+        flush();
+        continue;
+      }
       const item = LIST_ITEM_RE.exec(line);
       const indent = /^[ \t]*/.exec(line)?.[0].length ?? 0;
       if (item && (indent === 0 || (open === null && indent <= 3))) {
         flush();
-        const count = (itemCounts.get(scope.line) ?? 0) + 1;
-        itemCounts.set(scope.line, count);
         if (!CHECKBOX_RE.test(item[3])) {
+          const count = (itemCounts.get(scope.line) ?? 0) + 1;
+          itemCounts.set(scope.line, count);
           const markerWidth = item[1].length + item[2].length + (/^[ \t]*/.exec(line.slice(item[1].length + item[2].length))?.[0].length ?? 1);
           open = { heading: scope, item: count, line: i + 1, indentWidth: markerWidth, lines: [item[3].trimEnd()] };
         }
