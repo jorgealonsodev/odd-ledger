@@ -5,7 +5,7 @@ import type { FetchedRevisions } from './fetch-git-revisions';
 import { EMPTY_DOCUMENT_STRUCTURE, type FeatureModel } from './build-feature-model';
 const EMPTY_COUNTS = { done: 0, total: 0, percentage: 0, doneUnproven: 0 };
 const NO_REVISIONS: FetchedRevisions = { revisions: [], truncated: false, skippedCount: 0 };
-const slimModel = (featureName: string): FeatureModel => ({ featureName, documentPath: `/workspace/odd/tasks/${featureName}.md`, title: null, branch: null, progress: EMPTY_COUNTS, sections: [], nextStep: null, structure: EMPTY_DOCUMENT_STRUCTURE });
+const slimModel = (featureName: string): FeatureModel => ({ featureName, documentPath: `/workspace/odd/tasks/${featureName}.md`, title: null, branch: null, progress: EMPTY_COUNTS, sections: [], nextStep: null, structure: EMPTY_DOCUMENT_STRUCTURE, unattachedEvidence: [], ambiguousEvidence: [] });
 
 function fakePanel(): {
   panel: OpenFeaturePanel;

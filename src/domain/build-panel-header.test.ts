@@ -25,6 +25,8 @@ function model(overrides: Partial<FeatureModel> = {}): FeatureModel {
     sections: [],
     nextStep: null,
     structure: EMPTY_DOCUMENT_STRUCTURE,
+    unattachedEvidence: [],
+    ambiguousEvidence: [],
     ...overrides,
   };
 }

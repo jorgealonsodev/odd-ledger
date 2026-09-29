@@ -29,6 +29,8 @@ function featureModel(featureName: string, documentPath: string): FeatureModel {
     sections: [],
     nextStep: null,
     structure: EMPTY_DOCUMENT_STRUCTURE,
+    unattachedEvidence: [],
+    ambiguousEvidence: [],
   };
 }
 
@@ -51,6 +53,8 @@ function taskNode(featureName: string, documentPath: string, startLine: number):
     startLine,
     endLine: startLine,
     evidence: '',
+    route: null,
+    tableEvidence: [],
   };
   return new TaskNode(itemModel, sectionNode, documentPath);
 }

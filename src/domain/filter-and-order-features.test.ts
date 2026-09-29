@@ -29,6 +29,8 @@ function item(overrides: Partial<ItemModel> & { derivedState: DerivedItemState }
     startLine: 10,
     endLine: 11,
     evidence: '',
+    route: null,
+    tableEvidence: [],
     ...overrides,
   };
 }
@@ -54,6 +56,8 @@ function feature(overrides: Partial<FeatureModel> = {}): FeatureModel {
     sections: [],
     nextStep: null,
     structure: EMPTY_DOCUMENT_STRUCTURE,
+    unattachedEvidence: [],
+    ambiguousEvidence: [],
     ...overrides,
   };
 }
