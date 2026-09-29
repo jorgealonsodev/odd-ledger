@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.2.0
+
+Reads evidence recorded in a **progress table**, so a document that keeps one row per task
+no longer shows every closed task as done but unproven, and needs no second copy of the
+evidence under each checkbox.
+
+- A progress table is a pipe table whose first column is `Task`, `ID`, `Task ID` or `Tarea`,
+  under a heading starting with `progress` or `evidence` (`## Progress / evidence`,
+  `## Evidence`, `### Evidence log`). A table anywhere else is never read as evidence.
+- Rows link to a task by ID: the whole first cell, else its first token (`E5-5 cleanup`
+  links to `E5-5`). A task can have several rows. A row matching no task is shown at
+  document level and counted toward no task; a row matching several (duplicate IDs) is
+  named as ambiguous and linked to none.
+- A row proves a checked task only when a cell other than the ID and the `Route` column holds
+  something that is not empty, a dash, or a bare `pending` / `n/a` / `tbd`. An empty row leaves the task unproven; a row for an open task never
+  changes its state.
+- The commit shown comes from a `Commit` column (else the first commit-like token in the
+  row); a `Route` column supplies the task's route. Inline evidence still counts and is
+  shown first, then the table rows, each naming its source (`inline`, or
+  `table "<heading>", row N`).
+- The reader tolerates hand-written tables: with or without outer pipes, alignment colons,
+  `\|` escapes, pipes inside code spans, ragged rows, several tables in one document.
+  A table inside a fenced code block is an example, not evidence.
+- Table cells are rendered like any other document text: raw HTML escaped, images off, same
+  link allow-list. A document with no progress table reads exactly as before.
+
 ## 1.1.2
 
 Marketplace metadata only: the extension now lists the `Visualization` category and a set of

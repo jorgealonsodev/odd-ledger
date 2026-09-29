@@ -23,6 +23,14 @@ section or a feature turns green only when everything under it is closed *and* p
 unproven task withholds the green from its whole group, because going green there would
 repeat the very claim the document failed to back up.
 
+Evidence can be written under the checkbox, or in a **progress table** with one row per
+task (first column the task ID, under a `Progress` or `Evidence` heading). Both are read,
+and both can appear in one document. A table row counts only when it actually says
+something: a row of empty cells, dashes or a bare `pending` proves nothing (a `Route` cell
+alone does not count), and a row for an open task never
+changes its state. The panel names where each piece of evidence came from, and shows any
+row that matches no task, or more than one, instead of dropping it.
+
 The same rule governs silence. A field your document does not record is stated as **not
 recorded**, never drawn as a zero and never left blank, because a blank and a zero both
 read as answers when the truth is that nobody said.
@@ -75,6 +83,9 @@ There is nothing to configure. The extension contributes no settings.
   (no repository, or not yet committed) sorts after every dated one, by name; it is checked
   again only after a manual refresh or a watched change, not on every tree redraw.
 - History reads the fifty most recent revisions, and says so when it truncates.
+- A progress table is read only under a heading that starts with `progress` or `evidence`,
+  and only when its first column header is `Task`, `ID`, `Task ID` or `Tarea`. Any other
+  table, such as scope or risks, is never treated as proof.
 - Markdown in your evidence is rendered, but images are not loaded and appear as a stray
   marker. Nothing else is affected.
 - Creation-date lookups never run more than 4 at once. A project with many undated

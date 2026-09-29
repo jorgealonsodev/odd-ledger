@@ -72,16 +72,25 @@ different formats:
 
 ## Delivery
 
-- Forecast: ~800–1200 authored changed lines (> 400) → strategy `ask-on-risk`; chain strategy
-  to be asked once if the running count exceeds the budget.
+- Forecast: ~800–1200 authored changed lines (> 400) → strategy `ask-on-risk`; the running count
+  reached ~2060 authored lines, so the chain strategy was asked and the user chose
+  `stacked-to-main` (2026-09-29): one PR per task, each based on the previous.
+- Slice boundaries: PR1 = T1 (1abda48, 8603f39); PR2 = T2 (1bfb633, 35189e8);
+  PR3 = T3 (cae1186, ce8189a); PR4 = T4 + T5 (5ec319c, 43a592f, a8bd475 and its doc commit).
 - RDD: on (global). Review candidate = work-unit commit / slice.
+- PR chain (stacked-to-main, opened 2026-09-29; merge in order with merge commits, retarget the next PR to `main` after each merge):
+  - PR1 #5 https://github.com/jorgealonsodev/odd-ledger/pull/5 (`feat/progress-table-evidence-1-parse` -> `main`)
+  - PR2 #6 https://github.com/jorgealonsodev/odd-ledger/pull/6 (`feat/progress-table-evidence-2-link` -> PR1 branch)
+  - PR3 #7 https://github.com/jorgealonsodev/odd-ledger/pull/7 (`feat/progress-table-evidence-3-panel` -> PR2 branch)
+  - PR4 #8 https://github.com/jorgealonsodev/odd-ledger/pull/8 (`feat/progress-table-evidence` -> PR3 branch)
 
 ## Tasks
 
 - [x] T1 Domain: detect progress tables (heading + first-column header, tolerant GFM syntax) and parse rows into cells.
 - [x] T2 Domain: link rows to tasks (exact, first-token, ambiguous, unattached); derive table evidence, commit and route; apply honesty rules; merge with inline evidence (inline first); tree/tiles counts.
 - [x] T3 Adapter: panel shows table evidence with its source label, plus unattached and ambiguous rows; tree label uses the linked commit; escaping unchanged.
-- [ ] T4 Fixtures, optional real-corpus check against the real document, README/CHANGELOG docs.
+- [x] T4 Fixtures, optional real-corpus check against the real document, README/CHANGELOG docs.
+- [x] T5 Cleanup of review-9e6933213c59853a advisories: (1) Route column and bare `pending`/`n/a`/`tbd` cells are not evidence; (2) an H1 closes deeper headings; (3) real-corpus `withoutProgressTables` reuses the parser.
 
 ## Acceptance criteria
 
@@ -98,10 +107,12 @@ different formats:
 
 | Task | Route + trigger | Commit | Checks | Review tier/outcome |
 | --- | --- | --- | --- | --- |
-| T1 | delegated (writer trigger: 2+ non-trivial files) | 1abda48 | RED 15 failed (stub returned no tables) -> GREEN 337 pass / 0 fail (`npm run test:domain`); `npm run check-types` clean | pending (slice review) |
-| T2 | delegated (writer trigger: 2+ non-trivial files) | 1bfb633 | RED 18 failed (linker stub) then 11 failed (model/derive wiring stubs) -> GREEN 376 pass / 0 fail, 1 skipped (`npm run test:domain`); `npm run check-types` clean | pending (slice review) |
-| T3 | delegated (writer trigger: 2+ non-trivial files) | cae1186 | RED 11 domain failures (evidence-piece stubs) + 7 extension-host failures (tooltip/panel/regions) -> GREEN `npm run test:domain` 389 pass / 0 fail; `npm run test:extension` 139 adapter-unit + 27 workspace passing; `npm run check-types` clean | pending (slice review) |
+| T1 | delegated (writer trigger: 2+ non-trivial files) | 1abda48 | RED 15 failed (stub returned no tables) -> GREEN 337 pass / 0 fail (`npm run test:domain`); `npm run check-types` clean | medium; slice review consent granted, `review-9e6933213c59853a` (main..43a592f), 1 lens (review-reliability): approved, acknowledged, authority burned (revision sha256:f6ba3ab0c443df2be5a9f305475d91b80123271f9f5a688a659f3113ee39afb9) |
+| T2 | delegated (writer trigger: 2+ non-trivial files) | 1bfb633 | RED 18 failed (linker stub) then 11 failed (model/derive wiring stubs) -> GREEN 376 pass / 0 fail, 1 skipped (`npm run test:domain`); `npm run check-types` clean | medium; slice review consent granted, `review-9e6933213c59853a` (main..43a592f), 1 lens (review-reliability): approved, acknowledged, authority burned (revision sha256:f6ba3ab0c443df2be5a9f305475d91b80123271f9f5a688a659f3113ee39afb9) |
+| T3 | delegated (writer trigger: 2+ non-trivial files) | cae1186 | RED 11 domain failures (evidence-piece stubs) + 7 extension-host failures (tooltip/panel/regions) -> GREEN `npm run test:domain` 389 pass / 0 fail; `npm run test:extension` 139 adapter-unit + 27 workspace passing; `npm run check-types` clean | medium; slice review consent granted, `review-9e6933213c59853a` (main..43a592f), 1 lens (review-reliability): approved, acknowledged, authority burned (revision sha256:f6ba3ab0c443df2be5a9f305475d91b80123271f9f5a688a659f3113ee39afb9) |
+| T4 | delegated (writer trigger: 2+ non-trivial files) | 5ec319c | Characterisation tests over already-implemented behaviour: no RED (7 format variants + 3 not-evidence tables passed on first run; disclosed). `npm run test:domain` 401 tests, 399 pass / 0 fail / 2 skipped (opt-in); `npm run test:extension` 139 + 27 passing; `npm run test:package` 0 fail. Real document via `ODD_LEDGER_REAL_TABLE_CORPUS_DIR`: 27/30, 0 unproven; table removed: 27 unproven; 1 unattached row, 0 ambiguous | medium; slice review consent granted, `review-9e6933213c59853a` (main..43a592f), 1 lens (review-reliability): approved, acknowledged, authority burned (revision sha256:f6ba3ab0c443df2be5a9f305475d91b80123271f9f5a688a659f3113ee39afb9) |
+| T5 | delegated (writer trigger: 2+ non-trivial files) | a8bd475 | RED 3 failed (route-only row, pending markers, H1 scope) -> GREEN `npm run test:domain` 403 pass / 0 fail / 2 skipped; `npm run test:extension` 139 + 27 passing; `npm run check-types` clean; real document via `ODD_LEDGER_REAL_TABLE_CORPUS_DIR`: 0 unproven with table, 27 without | assessed 43a592f..fd1c764: medium, review_due=false (under_budget, 120 lines) → pending in slice; covered by the next assessment from boundary 43a592f |
 
 ## Next step
 
-T4 — fixtures, real-corpus check, README/CHANGELOG.
+Delivery: create the stacked-to-main PR chain (push and PR creation await the user).

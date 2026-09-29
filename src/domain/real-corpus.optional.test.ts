@@ -23,9 +23,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseDocumentStructure } from './parse-document-structure';
+import { parseDocumentStructure, splitLines } from './parse-document-structure';
 import { parseChecklist } from './parse-checklist';
 import { deriveChecklistState } from './derive-checklist-state';
+import { buildFeatureModel } from './build-feature-model';
+import { parseProgressTables } from './parse-progress-tables';
 
 const REAL_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_CORPUS_DIR';
 
@@ -58,5 +60,65 @@ test('the real ODD documents on this machine parse without throwing (opt-in, loc
 
     assert.ok(structure.title !== null, `expected an H1 title in a real document`);
     assert.ok(structure.sections.length > 0, `expected at least one section in a real document`);
+  }
+});
+
+/**
+ * A second, separate opt-in: a directory of real documents that record
+ * their evidence in a progress table (one row per closed task). Kept apart
+ * from the corpus above because it asserts something about content that
+ * only such documents satisfy: the ledger must read every closed task as
+ * proven through its table row, and must read the same tasks as unproven
+ * again once the table is removed, which proves the table is the source of
+ * the evidence. Nothing about what a document says is asserted or written
+ * anywhere; only counts.
+ */
+const REAL_TABLE_CORPUS_DIR_ENV = 'ODD_LEDGER_REAL_TABLE_CORPUS_DIR';
+
+/** The document without the progress tables the parser itself reports: the
+ * lines from each table's header row to its last row. Reusing the parser's
+ * detection keeps heading rules (slugs, emphasis, the title) and fenced code
+ * exactly as the ledger reads them. */
+function withoutProgressTables(text: string): string {
+  const lines = splitLines(text);
+  const drop = new Set<number>();
+  for (const table of parseProgressTables(text)) {
+    const last = table.rows.length > 0 ? table.rows[table.rows.length - 1].line : table.headerLine + 1;
+    for (let line = table.headerLine; line <= last; line++) {
+      drop.add(line);
+    }
+  }
+  return lines.filter((_, index) => !drop.has(index + 1)).join('\n');
+}
+
+test('real table-format documents read every closed task as proven, and unproven again without the table (opt-in, local only)', (t) => {
+  const dir = process.env[REAL_TABLE_CORPUS_DIR_ENV];
+
+  if (!dir || !existsSync(dir)) {
+    t.skip(
+      `${REAL_TABLE_CORPUS_DIR_ENV} is not set, or does not point to an existing directory; ` +
+        'skipping the real table-format check. Set it to a local directory of *.md documents ' +
+        'that record their evidence in a progress table. Expected and correct on any other machine, including CI.',
+    );
+    return;
+  }
+
+  const files = readdirSync(dir).filter((name) => name.endsWith('.md') && statSync(join(dir, name)).isFile());
+  assert.ok(files.length > 0, `${REAL_TABLE_CORPUS_DIR_ENV} is set to a directory with no .md files in it`);
+
+  for (const file of files) {
+    const text = readFileSync(join(dir, file), 'utf8');
+
+    const withTable = buildFeatureModel('real', join(dir, file), text);
+    assert.ok(withTable.progress.done > 0, 'expected the document to have closed tasks');
+    assert.equal(withTable.progress.doneUnproven, 0, 'expected every closed task to be proven through its table row');
+
+    const withoutTable = buildFeatureModel('real', join(dir, file), withoutProgressTables(text));
+    assert.equal(
+      withoutTable.progress.doneUnproven,
+      withoutTable.progress.done,
+      'expected every closed task to be unproven again once the table is removed',
+    );
+    assert.equal(withoutTable.progress.done, withTable.progress.done, 'removing the table must not change which tasks are closed');
   }
 });

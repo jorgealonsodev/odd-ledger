@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildFeatureModel } from './build-feature-model';
 import { buildRecordedFields } from './build-recorded-fields';
-import { PROGRESS_TABLE_DOCUMENT } from './fixtures/progress-table-documents';
+import { NOT_EVIDENCE_TABLES, PROGRESS_TABLE_DOCUMENT, PROGRESS_TABLE_VARIANTS } from './fixtures/progress-table-documents';
 
 /**
  * The whole pipeline over a synthetic document that records its evidence in
@@ -159,3 +159,28 @@ test('the recorded Route field counts a route read from a table as well as an in
   assert.notEqual(route.value, 'not recorded');
   assert.match(route.value, /per task, \d+ of 7 recorded/);
 });
+
+// --- the same evidence, read from different formats ----------------------------
+
+for (const variant of PROGRESS_TABLE_VARIANTS) {
+  test(`table format "${variant.name}" proves its tasks, links every row and reads the commit`, () => {
+    const model = modelFrom(variant.text);
+    assert.equal(model.progress.doneUnproven, 0);
+    assert.equal(model.unattachedEvidence.length, 0);
+    assert.equal(model.ambiguousEvidence.length, 0);
+    const [t1, t2, t3] = model.sections.flatMap((s) => s.items);
+    assert.equal(t1.derivedState, 'done');
+    assert.equal(t2.derivedState, 'done');
+    assert.equal(t3.derivedState, 'open');
+    assert.equal(t1.commitReference, '1a2b3c4');
+    assert.equal(t2.commitReference, '5d6e7f8');
+  });
+}
+
+for (const notEvidence of NOT_EVIDENCE_TABLES) {
+  test(`a table ${notEvidence.name} is not evidence: the checked tasks stay unproven`, () => {
+    const model = modelFrom(notEvidence.text);
+    assert.equal(model.progress.doneUnproven, 2);
+    assert.equal(model.unattachedEvidence.length, 0);
+  });
+}

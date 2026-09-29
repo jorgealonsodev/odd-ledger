@@ -226,13 +226,14 @@ export function parseProgressTables(text: string): ProgressTable[] {
     const headingMatch = HEADING_RE.exec(line);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      if (level === 1 && !titleSeen) {
-        // The document title scopes nothing: it sits above every section.
-        titleSeen = true;
-        continue;
-      }
       while (headings.length > 0 && headings[headings.length - 1].level >= level) {
         headings.pop();
+      }
+      if (level === 1 && !titleSeen) {
+        // The document title scopes nothing, but it still closes every
+        // heading above it.
+        titleSeen = true;
+        continue;
       }
       headings.push({ level, text: stripAtxClosingSequence(headingMatch[2] ?? ''), line: i + 1 });
       continue;

@@ -14,8 +14,10 @@
  *  - A row that matches no task is unattached: shown at document level,
  *    counted toward no task.
  *  - A linked row proves its task only when a cell other than the ID cell
- *    holds something that is neither empty nor just a dash. A row with
- *    nothing in it never turns a tick into proof.
+ *    and the Route column holds something that is neither empty, nor just a
+ *    dash, nor a bare placeholder (`pending`, `n/a`, `tbd`). The route says
+ *    how the work was done, not what proves it; a row with nothing else in
+ *    it never turns a tick into proof.
  *
  * Whether a proven row changes a task's state is decided by the caller
  * (derive-checklist-state.ts only ever consults it for a checked task), so
@@ -63,8 +65,8 @@ export interface TableEvidenceRow {
   readonly commit: string | null;
   /** The cell under a header containing `route`, when it holds something. */
   readonly route: string | null;
-  /** Whether a cell other than the ID cell holds something that is neither
-   * empty nor just a dash. */
+  /** Whether a cell other than the ID cell and the route holds something
+   * that is neither empty, nor just a dash, nor a bare placeholder. */
   readonly proves: boolean;
   /** How many tasks the row could link to: 0 unattached, 1 linked, 2+
    * ambiguous. */
@@ -89,11 +91,19 @@ export function tableSourceLabel(heading: string, row: number): string {
 }
 
 const DASH_ONLY_RE = /^[—–-]+$/;
+const PLACEHOLDER_RE = /^(pending|n\/a|tbd)$/i;
 
-/** Whether a cell says nothing: empty, or nothing but dashes. */
+/** Whether a cell says nothing: empty, nothing but dashes, or a bare
+ * placeholder (`pending`, `n/a`, `tbd`). */
 function isBlankCell(cell: string): boolean {
   const stripped = stripInlineMarkup(cell).trim();
-  return stripped.length === 0 || DASH_ONLY_RE.test(stripped);
+  return stripped.length === 0 || DASH_ONLY_RE.test(stripped) || PLACEHOLDER_RE.test(stripped);
+}
+
+/** Whether the column's header marks it as the route: it says how the work
+ * was done, not what proves it. */
+function isRouteHeader(header: string | undefined): boolean {
+  return (header ?? '').toLowerCase().includes('route');
 }
 
 function firstToken(text: string): string {
@@ -124,7 +134,7 @@ function findCommit(table: ProgressTable, cells: readonly string[]): string | nu
 
 function findRoute(table: ProgressTable, cells: readonly string[]): string | null {
   for (let index = 1; index < table.headers.length; index++) {
-    if (table.headers[index].toLowerCase().includes('route') && !isBlankCell(cells[index] ?? '')) {
+    if (isRouteHeader(table.headers[index]) && !isBlankCell(cells[index] ?? '')) {
       return cells[index].trim();
     }
   }
@@ -148,7 +158,7 @@ function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: numbe
     text: pairs.map((pair) => (pair.header ? `${pair.header}: ${pair.value}` : pair.value)).join('\n'),
     commit: findCommit(table, row.cells),
     route: findRoute(table, row.cells),
-    proves: row.cells.slice(1).some((cell) => !isBlankCell(cell)),
+    proves: row.cells.some((cell, index) => index > 0 && !isRouteHeader(table.headers[index]) && !isBlankCell(cell)),
     matchCount,
   };
 }
