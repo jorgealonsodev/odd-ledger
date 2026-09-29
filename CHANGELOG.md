@@ -13,6 +13,9 @@ An entry or a table row that names several tasks now counts for all of them.
   (`- T1.1 \`22deb08\` (RED ...), T1.2 \`7a87dcf\` (GREEN ...)` links T1.1 and T1.2, each showing
   the commit in its own clause). Commas inside parentheses, brackets or code spans do not open
   a clause; table rows use only their first cell.
+- A clause-start ID proves its task only through its **own clause** (the text up to the next
+  clause that starts another linked ID): `- T1 \`aaaa111\` done, T2 pending` proves T1 and links
+  T2 unproven. `not started` counts as a status word, like `pending`.
 - An ID mentioned mid-sentence (`fixes a regression introduced by T2.1`) never links.
   Ranges (`T0.1–T0.6b`, `T1 - T3`, `T1..T3`, `T1 to T3`) are never expanded; a leading range
   keeps the entry a note.

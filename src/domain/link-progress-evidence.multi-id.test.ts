@@ -102,6 +102,29 @@ test('clause-start IDs after a comma or semicolon link too, each with the commit
 test('a clause-start ID without a commit in its clause falls back to the first commit of the entry', () => {
   const linked = link('- T1 `aaaa111` done, T2 verified by hand');
   assert.equal(linked.byTask.get(11)?.[0].commit, 'aaaa111');
+  assert.equal(linked.byTask.get(11)?.[0].proves, true);
+});
+
+test('a clause-start ID proves its task only through its own clause', () => {
+  const pending = link('- T1 `aaaa111` done, T2 pending');
+  assert.deepEqual(linkedLines(pending), [10, 11]);
+  assert.equal(pending.byTask.get(10)?.[0].proves, true);
+  assert.equal(pending.byTask.get(11)?.[0].proves, false);
+  assert.equal(pending.provenStartLines.has(11), false);
+
+  const blocked = link('- Blocked on review, T2 not started');
+  assert.deepEqual(linkedLines(blocked), [11]);
+  assert.equal(blocked.provenStartLines.size, 0);
+
+  const both = link('- T1.1 `22deb08` (RED 4/9), T1.2 `7a87dcf` (GREEN 12/12)');
+  assert.ok(both.provenStartLines.has(13) && both.provenStartLines.has(14));
+
+  const echoes = link('- T2 done, T3 done.');
+  assert.deepEqual(linkedLines(echoes), [11, 12]);
+  assert.equal(echoes.provenStartLines.size, 0);
+
+  const note = link('- note; T2 done: `abc1234`');
+  assert.equal(note.provenStartLines.has(11), true);
 });
 
 test('a clause-start ID may itself open an ID group', () => {

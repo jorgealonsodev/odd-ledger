@@ -197,7 +197,7 @@ function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: numbe
 }
 
 /** A leading status word an entry may carry before its real content. */
-const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
+const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|not started|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
 const LEADING_SEPARATOR_RE = /^[\s:,—–-]+/;
 /** What may sit between an ID group and the text after it: separators plus
  * a joiner left dangling because no known ID followed it. */
@@ -324,10 +324,11 @@ function clauseStarts(text: string, from: number): number[] {
 }
 
 /** A task ID an entry names, with the commit inside its own clause when
- * it starts one. */
+ * it starts one, and whether its own text proves its task. */
 interface NamedId {
   readonly id: string;
   readonly clauseCommit: string | null;
+  readonly proves: boolean;
 }
 
 /** What a list entry names: the IDs it links to and the text after its
@@ -344,18 +345,22 @@ function readEntryNames(text: string, byId: ReadonlyMap<string, number[]>): Entr
   if (leading.range) {
     return { named: [], rest };
   }
-  const named: NamedId[] = leading.ids.map((id) => ({ id, clauseCommit: null }));
   const starts = clauseStarts(text, leading.end);
-  starts.forEach((start, index) => {
+  const clauses = starts.flatMap((start, index) => {
     const clauseEnd = index + 1 < starts.length ? starts[index + 1] - 1 : text.length;
     const group = readIdGroup(text.slice(0, clauseEnd), start, byId);
-    if (group.range) {
-      return;
-    }
-    const clauseRest = text.slice(group.end, clauseEnd);
+    return group.range || group.ids.length === 0 ? [] : [{ start, clauseEnd, group }];
+  });
+  // A clause's own text runs to the boundary that starts another linked ID.
+  const ownText = (from: number, index: number): string => text.slice(from, index + 1 < clauses.length ? clauses[index + 1].start - 1 : text.length);
+  const leadingProves = entryProves(text.slice(leading.end, clauses.length > 0 ? clauses[0].start - 1 : text.length).replace(GROUP_TAIL_SEPARATOR_RE, ''));
+  const named: NamedId[] = leading.ids.map((id) => ({ id, clauseCommit: null, proves: leadingProves }));
+  clauses.forEach(({ clauseEnd, group }, index) => {
+    const proves = entryProves(ownText(group.end, index).replace(GROUP_TAIL_SEPARATOR_RE, ''));
+    const clauseCommit = extractCommitReference(text.slice(group.end, clauseEnd));
     for (const id of group.ids) {
       if (!named.some((n) => n.id === id)) {
-        named.push({ id, clauseCommit: extractCommitReference(clauseRest) });
+        named.push({ id, clauseCommit, proves });
       }
     }
   });
@@ -469,10 +474,9 @@ export function linkProgressEvidence(
       unattached.push(buildEntryRow(entry, first.token, entry.text, entry.text, entryProves(first.rest), 0));
       continue;
     }
-    const proves = entryProves(rest);
     const shown = named.length === 1 && rest.trim().length > 0 ? rest : entry.text;
     const entryCommit = extractCommitReference(rest);
-    for (const { id, clauseCommit } of named) {
+    for (const { id, clauseCommit, proves } of named) {
       const matches = tasksWithId(byId, id);
       if (matches.length === 1) {
         const row = buildEntryRow(entry, id, shown, rest, proves, 1);
@@ -481,8 +485,8 @@ export function linkProgressEvidence(
     }
     const dupCount = ambiguousCount(ids);
     if (dupCount > 0) {
-      const firstDup = ids.find((id) => tasksWithId(byId, id).length > 1) as string;
-      ambiguous.push(buildEntryRow(entry, firstDup, entry.text, entry.text, proves, dupCount));
+      const firstDup = named.find((n) => tasksWithId(byId, n.id).length > 1) as NamedId;
+      ambiguous.push(buildEntryRow(entry, firstDup.id, entry.text, entry.text, firstDup.proves, dupCount));
     }
   }
 
