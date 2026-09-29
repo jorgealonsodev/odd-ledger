@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1
 
 Reads evidence recorded as a **progress list**, so a document that logs one bullet per task
 under its progress heading no longer shows those closed tasks as done but unproven.
