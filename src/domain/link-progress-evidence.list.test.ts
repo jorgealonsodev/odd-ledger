@@ -65,8 +65,8 @@ test('an entry whose first token names no task is a note: unattached, counted to
   assert.match(linked.unattached[0].text, /all tasks T1–T3 done/);
 });
 
-test('ranges and ID lists are never expanded', () => {
-  for (const line of ['- T1–T3 done: aaaa111', '- T1-T3 done: aaaa111', '- T1, T2 done: aaaa111', '- T1 – T3 done: aaaa111', '- T1/T2 done: aaaa111']) {
+test('ranges are never expanded: a leading range is a note (ID groups are covered in the multi-id tests)', () => {
+  for (const line of ['- T1–T3 done: aaaa111', '- T1-T3 done: aaaa111', '- T1 – T3 done: aaaa111', '- T1..T3 done: aaaa111', '- T1 to T3 done: aaaa111']) {
     const linked = link(line);
     assert.equal(linked.byTask.size, 0, line);
     assert.equal(linked.unattached.length, 1, line);

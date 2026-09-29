@@ -26,7 +26,8 @@ repeat the very claim the document failed to back up.
 Evidence can be written under the checkbox, in a **progress table** with one row per task
 (first column the task ID, under a `Progress` or `Evidence` heading), or as a **progress
 list** under the same heading, one bullet per task starting with its ID
-(`- T0.1 done: commit \`a9526b1\``). All three are read equally, and all can appear in one
+(`- T0.1 done: commit \`a9526b1\``; a bullet or table row naming several tasks, such as
+`- T0.1/T0.2 done: ...`, counts for each of them). All three are read equally, and all can appear in one
 document. A table row or list entry counts only when it actually says something: a row of
 empty cells, dashes or a bare `pending` proves nothing (a `Route` cell alone does not
 count), a bullet such as `- T0.1 done` is only an echo of the tick, and an entry for an
@@ -89,10 +90,15 @@ There is nothing to configure. The extension contributes no settings.
   and only when its first column header is `Task`, `ID`, `Task ID` or `Tarea`. Any other
   table, such as scope or risks, is never treated as proof.
 - A progress list is read under the same headings: each top-level bullet (or numbered item)
-  is one entry, with its indented and nested lines. It links to a task only when its first
-  word, without emphasis, backticks or a trailing `:` / `,` / `—`, is exactly a task ID. A
-  range (`T0.1–T0.6b`) or an ID list (`T1, T2`) is never expanded, so such a bullet is shown
-  as a note and proves nothing. A bullet proves a checked task only when, after the ID and
+  is one entry, with its indented and nested lines. It links to every task it names in its
+  leading ID group (`T1.3/T1.4 + follow-ups`, `T1, T2`, `T1 and T2`, joined by `,` `/` `&` `+`
+  `and` `y`; the group ends at the first word that is not a task ID) and to a task ID that
+  starts a clause after a `,` or `;` (`T1.1 \`22deb08\` (RED), T1.2 \`7a87dcf\` (GREEN)`).
+  A table row does the same with its first cell. An ID mentioned mid-sentence never links,
+  and a range (`T0.1–T0.6b`, `T1 - T3`, `T1..T3`) is never expanded, so a bullet that starts
+  with a range is shown as a note and proves nothing. Every linked task receives the whole
+  entry as its evidence, listed once per task; a duplicated task ID stays ambiguous while the
+  other IDs of the entry still link. A bullet proves a checked task only when, after the ID and
   one status word (`done`, `pending`, `wip`, ...), it still says something: `- T1 done.` or
   `- T1 done!` proves nothing. Checkbox items in that section are tasks, not evidence, and are
   not counted in the item numbers of the source labels. A thematic break (`---`, `* * *`) is
