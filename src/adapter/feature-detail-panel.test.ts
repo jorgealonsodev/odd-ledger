@@ -6,6 +6,7 @@ import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-fea
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
 import { HISTORY_CHART_CAPTION, UNAVAILABLE_HISTORY } from '../domain/build-history';
 import type { FeatureHistory } from '../domain/build-history';
+import { PROGRESS_LIST_DOCUMENT } from '../domain/fixtures/progress-list-documents';
 import { PROGRESS_TABLE_DOCUMENT } from '../domain/fixtures/progress-table-documents';
 
 /**
@@ -1013,5 +1014,55 @@ suite('FeatureDetailPanel — progress-table evidence', () => {
     assert.ok(!html.includes('class="evidence-source"'));
     assert.ok(!html.includes('Evidence not linked to a task'));
     assert.match(html, /Checked by hand/);
+  });
+
+  test('a task proven by a list entry shows the entry under it with its list and item as the source', () => {
+    const html = htmlFor(PROGRESS_LIST_DOCUMENT);
+    assert.match(html, /list &quot;Progress \/ evidence&quot;, item 1/);
+    assert.match(html, /done: commit <code>aaaa111<\/code> \(docs-only\)/);
+  });
+
+  test('list entries follow table rows under a task, each with its own source', () => {
+    const html = htmlFor(PROGRESS_LIST_DOCUMENT);
+    const row = html.indexOf('table &quot;Progress / evidence&quot;, row 1');
+    const entry = html.indexOf('list &quot;Progress / evidence&quot;, item 8');
+    assert.ok(row > 0 && entry > row, 'expected the table row before the list entry');
+  });
+
+  test('a note that names no task is shown in the document-level region', () => {
+    const html = htmlFor(PROGRESS_LIST_DOCUMENT);
+    assert.match(html, /Evidence not linked to a task/);
+    assert.match(html, /all tasks L1–L3 done/);
+    assert.match(html, /2026-09-29/);
+  });
+
+  test('a checked task whose entry only echoes a status word still shows the unproven statement', () => {
+    const html = htmlFor(PROGRESS_LIST_DOCUMENT);
+    assert.equal(html.split(UNPROVEN_TASK_MESSAGE).length - 1, 3, 'L3, L5 and L8 stay unproven');
+  });
+
+  test('an entry for an open task is labelled as partial evidence', () => {
+    assert.match(htmlFor(PROGRESS_LIST_DOCUMENT), /list &quot;Progress \/ evidence&quot;, item 5 \(partial: the task is not closed\)/);
+  });
+
+  test('a <script> or image in a list entry is neutralised end to end through the panel', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 First',
+      '',
+      '## Progress',
+      '',
+      '- T1 done: <script>alert(1)</script> ![img](https://example.com/x.png)',
+      '- Z9 note <script>alert(2)</script> [x](javascript:alert(3))',
+    ].join('\n');
+    const html = htmlFor(text);
+    assert.ok(!html.includes('<script>alert'), 'expected no raw <script> from an entry to reach the page');
+    assert.match(html, /&lt;script&gt;alert\(1\)/);
+    assert.match(html, /&lt;script&gt;alert\(2\)/);
+    assert.ok(!/<img\b/i.test(html), 'expected no <img> element from an entry');
+    assert.ok(!/href\s*=\s*"javascript:/i.test(html), 'expected no javascript: href from an entry');
   });
 });

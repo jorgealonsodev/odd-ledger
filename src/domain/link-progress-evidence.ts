@@ -19,6 +19,20 @@
  *    how the work was done, not what proves it; a row with nothing else in
  *    it never turns a tick into proof.
  *
+ * A progress list entry (parseProgressLists) is read the same way, as one
+ * more piece of evidence in the same shape:
+ *
+ *  - It links by its first token, emphasis and code markers stripped and
+ *    trailing `:`, `,`, `—`, `–` removed, which must equal a task ID
+ *    exactly. A range (`T0.1–T0.6b`) or an ID list (`T1, T2`) is never
+ *    expanded: it links to nothing and stays a note.
+ *  - A note (first token names no task) is unattached, and a duplicated ID
+ *    is ambiguous, exactly as for a table row.
+ *  - It proves its task only when something remains after removing the ID,
+ *    its separators and one leading status word (`done`, `pending`, ...)
+ *    that is not empty, a dash or a bare placeholder: `- T1 done` alone is
+ *    a tick's echo, not proof.
+ *
  * Whether a proven row changes a task's state is decided by the caller
  * (derive-checklist-state.ts only ever consults it for a checked task), so
  * a row for an open task is evidence to show, never a state change.
@@ -29,7 +43,7 @@
 import { extractCommitReference } from './derive-checklist-state';
 import { isIdentifierToken } from './parse-checklist';
 import { stripInlineMarkup } from './parse-progress-tables';
-import type { ProgressTable, ProgressTableRow } from './parse-progress-tables';
+import type { ProgressListEntry, ProgressTable, ProgressTableRow } from './parse-progress-tables';
 
 /** What linking needs to know about a task: its ID (if any) and the line
  * that identifies it. */
@@ -45,9 +59,13 @@ export interface EvidencePair {
   readonly value: string;
 }
 
-/** One progress-table row, with everything the tree and panel need. */
+/** One piece of progress evidence, with everything the tree and panel
+ * need: a progress-table row or, with a `list "..."` source, a progress
+ * list entry (whose `row` is its item number, `pairs` a single header-less
+ * value and `route` always null). */
 export interface TableEvidenceRow {
-  /** Where the evidence came from, e.g. `table "Progress / evidence", row 12`. */
+  /** Where the evidence came from, e.g. `table "Progress / evidence", row 12`
+   * or `list "Progress / evidence", item 3`. */
   readonly source: string;
   readonly heading: string;
   /** 1-based data-row index within its table. */
@@ -88,6 +106,11 @@ export interface LinkedProgressEvidence {
 /** The label naming where a table row's evidence came from. */
 export function tableSourceLabel(heading: string, row: number): string {
   return `table "${heading}", row ${row}`;
+}
+
+/** The label naming where a list entry's evidence came from. */
+export function listSourceLabel(heading: string, item: number): string {
+  return `list "${heading}", item ${item}`;
 }
 
 const DASH_ONLY_RE = /^[—–-]+$/;
@@ -163,6 +186,64 @@ function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: numbe
   };
 }
 
+/** A leading status word an entry may carry before its real content. */
+const STATUS_WORD_RE = /^(?:done|closed|completed?|finished|pending|in progress|wip|todo|blocked)(?![\p{L}\p{N}])/iu;
+const LEADING_SEPARATOR_RE = /^[\s:,—–-]+/;
+const TRAILING_PUNCTUATION_RE = /[\s.!?;:,…]+$/u;
+const TRAILING_ID_PUNCTUATION_RE = /[:,—–_]+$/;
+const ENTRY_TOKEN_RE = /^[\s*_`]*([^\s*`]+)[*`_]*/;
+
+/** An entry's first token and what follows it. */
+interface EntryHead {
+  /** The first token with markup and trailing `:`, `,`, `—`, `–` removed. */
+  readonly token: string;
+  /** The text after the token and its separators, markup left as written. */
+  readonly rest: string;
+  /** Whether a `,` or dash follows the token and leads to another known
+   * task ID: an ID list or a range, which is never expanded. */
+  readonly listLike: boolean;
+}
+
+function readEntryHead(text: string, byId: ReadonlyMap<string, number[]>): EntryHead {
+  const match = ENTRY_TOKEN_RE.exec(text);
+  if (!match) {
+    return { token: '', rest: text.trim(), listLike: false };
+  }
+  const rawToken = match[1];
+  const token = rawToken.replace(TRAILING_ID_PUNCTUATION_RE, '');
+  const rest = text.slice(match[0].length).replace(LEADING_SEPARATOR_RE, '');
+  const afterToken = text.slice(match[0].length);
+  const separated = /,$/.test(rawToken) || /^\s*[—–-]/.test(afterToken);
+  const next = ENTRY_TOKEN_RE.exec(afterToken.replace(LEADING_SEPARATOR_RE, ''));
+  const nextToken = next ? next[1].replace(TRAILING_ID_PUNCTUATION_RE, '') : '';
+  return { token, rest, listLike: separated && byId.has(nextToken) };
+}
+
+/** Whether what an entry says after its ID proves anything: something is
+ * left once one leading status word is removed, and it is not a dash or a
+ * bare placeholder. Trailing punctuation left by a bare status word
+ * (`done.`, `done!`) is not content. */
+function entryProves(rest: string): boolean {
+  const withoutStatus = stripInlineMarkup(rest).replace(STATUS_WORD_RE, '').replace(LEADING_SEPARATOR_RE, '').replace(TRAILING_PUNCTUATION_RE, '');
+  return !isBlankCell(withoutStatus);
+}
+
+function buildEntryRow(entry: ProgressListEntry, idCell: string, shown: string, evidenceText: string, proves: boolean, matchCount: number): TableEvidenceRow {
+  return {
+    source: listSourceLabel(entry.heading, entry.item),
+    heading: entry.heading,
+    row: entry.item,
+    line: entry.line,
+    idCell,
+    pairs: [{ header: '', value: shown }],
+    text: shown,
+    commit: extractCommitReference(evidenceText),
+    route: null,
+    proves,
+    matchCount,
+  };
+}
+
 /** The `startLine`s of the tasks whose ID is `id` (empty for no match). */
 function tasksWithId(byId: ReadonlyMap<string, number[]>, id: string): number[] {
   return byId.get(id) ?? [];
@@ -173,7 +254,11 @@ function tasksWithId(byId: ReadonlyMap<string, number[]>, id: string): number[] 
  * rules; tables and rows are visited in document order, so each task's
  * rows come out in document order too.
  */
-export function linkProgressEvidence(tables: readonly ProgressTable[], tasks: readonly EvidenceTask[]): LinkedProgressEvidence {
+export function linkProgressEvidence(
+  tables: readonly ProgressTable[],
+  tasks: readonly EvidenceTask[],
+  lists: readonly ProgressListEntry[] = [],
+): LinkedProgressEvidence {
   const byId = new Map<string, number[]>();
   for (const task of tasks) {
     if (task.id !== null) {
@@ -186,6 +271,20 @@ export function linkProgressEvidence(tables: readonly ProgressTable[], tasks: re
   const ambiguous: TableEvidenceRow[] = [];
   const provenStartLines = new Set<number>();
 
+  const place = (row: TableEvidenceRow, matches: readonly number[]): void => {
+    if (matches.length === 0) {
+      unattached.push(row);
+    } else if (matches.length > 1) {
+      ambiguous.push(row);
+    } else {
+      const startLine = matches[0];
+      byTask.set(startLine, [...(byTask.get(startLine) ?? []), row]);
+      if (row.proves) {
+        provenStartLines.add(startLine);
+      }
+    }
+  };
+
   for (const table of tables) {
     for (const tableRow of table.rows) {
       const idCell = stripInlineMarkup(tableRow.cells[0] ?? '');
@@ -196,19 +295,21 @@ export function linkProgressEvidence(tables: readonly ProgressTable[], tasks: re
           matches = tasksWithId(byId, token);
         }
       }
+      place(buildRow(table, tableRow, matches.length), matches);
+    }
+  }
 
-      const row = buildRow(table, tableRow, matches.length);
-      if (matches.length === 0) {
-        unattached.push(row);
-      } else if (matches.length > 1) {
-        ambiguous.push(row);
-      } else {
-        const startLine = matches[0];
-        byTask.set(startLine, [...(byTask.get(startLine) ?? []), row]);
-        if (row.proves) {
-          provenStartLines.add(startLine);
-        }
-      }
+  // List entries come after every table row, so a task's evidence reads
+  // inline, then table rows, then list entries.
+  for (const entry of lists) {
+    const head = readEntryHead(entry.text, byId);
+    const matches = !head.listLike && isIdentifierToken(head.token) ? tasksWithId(byId, head.token) : [];
+    const proves = entryProves(head.rest);
+    if (matches.length === 1) {
+      const shown = head.rest.trim().length > 0 ? head.rest : entry.text;
+      place(buildEntryRow(entry, head.token, shown, head.rest, proves, 1), matches);
+    } else {
+      place(buildEntryRow(entry, head.token, entry.text, entry.text, proves, matches.length), matches);
     }
   }
 

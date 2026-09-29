@@ -40,8 +40,14 @@ function escapeMarkdownLabel(text: string): string {
  */
 export function formatEvidenceRowMarkdown(row: TableEvidenceRow): string {
   return row.pairs
-    .map((pair) => (pair.header ? `- **${escapeMarkdownLabel(pair.header)}**: ${pair.value}` : `- ${pair.value}`))
+    .map((pair) => (pair.header ? `- **${escapeMarkdownLabel(pair.header)}**: ${pair.value}` : `- ${indentContinuation(pair.value)}`))
     .join('\n');
+}
+
+/** Indents every line after the first by two spaces, so a multi-line value
+ * (a list entry with nested lines) stays inside its list item. */
+function indentContinuation(value: string): string {
+  return value.split('\n').join('\n  ');
 }
 
 /** The pieces of one row, prepared like any other evidence. */
@@ -51,7 +57,7 @@ export function buildRowPiece(row: TableEvidenceRow): EvidencePiece {
 
 /**
  * A task's evidence pieces: inline text first (when it has any), then its
- * table rows. Empty when it has neither.
+ * table rows, then its list entries. Empty when it has none.
  */
 export function buildEvidencePieces(item: {
   readonly evidence: string;

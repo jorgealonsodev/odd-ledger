@@ -10,6 +10,7 @@ import {
 } from './feature-tree-provider';
 import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
 import { EMPTY_DOCUMENT_STRUCTURE, buildFeatureModel } from '../domain/build-feature-model';
+import { PROGRESS_LIST_DOCUMENT } from '../domain/fixtures/progress-list-documents';
 import { PROGRESS_TABLE_DOCUMENT } from '../domain/fixtures/progress-table-documents';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 
@@ -620,5 +621,26 @@ suite('TaskNode — progress-table evidence', () => {
 
   test('a checked task whose row says nothing still reads unproven in the tree', () => {
     assert.equal(nodeFor(tableTask('E2-1')).description, 'checked, no evidence recorded');
+  });
+
+  function listTask(id: string): ItemModel {
+    const model = buildFeatureModel('sample', '/x/sample.md', PROGRESS_LIST_DOCUMENT);
+    const found = model.sections.flatMap((s) => s.items).find((i) => i.id === id);
+    assert.ok(found);
+    return found!;
+  }
+
+  test('a task proven by a list entry shows its commit as the description', () => {
+    assert.equal(nodeFor(listTask('L1')).description, 'aaaa111');
+  });
+
+  test('the tooltip lists a list entry under its source', () => {
+    const value = markdownTooltipValue(nodeFor(listTask('L1')).tooltip);
+    assert.match(value, /list "Progress \/ evidence", item 1/);
+    assert.match(value, /commit `aaaa111`/);
+  });
+
+  test('a checked task whose entry only echoes a status word reads unproven in the tree', () => {
+    assert.equal(nodeFor(listTask('L3')).description, 'checked, no evidence recorded');
   });
 });
