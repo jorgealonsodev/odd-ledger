@@ -100,7 +100,7 @@ const FENCE_CLOSE_RE = /^(`{3,}|~{3,})$/;
  * never does. */
 const ID_TOKEN_RE = /^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$/;
 
-function isIdentifierToken(token: string): boolean {
+export function isIdentifierToken(token: string): boolean {
   return ID_TOKEN_RE.test(token) && /[0-9]/.test(token);
 }
 

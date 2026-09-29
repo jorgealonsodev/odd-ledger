@@ -54,6 +54,8 @@ function emptyFeatureModel(featureName: string, documentPath: string): FeatureMo
     sections: [],
     nextStep: null,
     structure: EMPTY_DOCUMENT_STRUCTURE,
+    unattachedEvidence: [],
+    ambiguousEvidence: [],
   };
 }
 

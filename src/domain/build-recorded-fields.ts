@@ -144,7 +144,8 @@ function hasRouteNote(evidence: string): boolean {
 /**
  * Route is recorded per task, not in a section of its own: this counts how
  * many checklist items across the model's item-bearing sections carry a
- * route note in their evidence, out of how many items there are in total.
+ * route note in their evidence, or a route in their progress-table row,
+ * out of how many items there are in total.
  * A derived count over what the document does record — never a guessed or
  * computed budget figure, which is what Line budget below refuses to be.
  */
@@ -154,7 +155,7 @@ function formatRoute(sections: readonly SectionModel[]): string {
   for (const section of sections) {
     for (const item of section.items) {
       total += 1;
-      if (hasRouteNote(item.evidence)) {
+      if (hasRouteNote(item.evidence) || item.route !== null) {
         withNote += 1;
       }
     }

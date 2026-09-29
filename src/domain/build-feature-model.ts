@@ -14,7 +14,10 @@
 import { extractCommitReference } from './derive-checklist-state';
 import type { ChecklistCounts, DerivedChecklistItem, DerivedItemState } from './derive-checklist-state';
 import { deriveChecklistState } from './derive-checklist-state';
+import { linkProgressEvidence } from './link-progress-evidence';
+import type { TableEvidenceRow } from './link-progress-evidence';
 import { parseChecklist } from './parse-checklist';
+import { parseProgressTables } from './parse-progress-tables';
 import type { DocumentSection, DocumentStructure, SectionKind } from './parse-document-structure';
 import { parseDocumentStructure } from './parse-document-structure';
 import { unwrapLines } from './unwrap-wrapped-lines';
@@ -54,6 +57,8 @@ export interface ItemModel {
   readonly startLine: number;
   readonly endLine: number;
   readonly evidence: string;
+  readonly route: string | null;
+  readonly tableEvidence: readonly TableEvidenceRow[];
 }
 
 /** One `##` section that holds at least one checklist item. A section with
@@ -88,6 +93,8 @@ export interface FeatureModel {
   readonly sections: SectionModel[];
   readonly nextStep: NextStepModel | null;
   readonly structure: DocumentStructure;
+  readonly unattachedEvidence: readonly TableEvidenceRow[];
+  readonly ambiguousEvidence: readonly TableEvidenceRow[];
 }
 
 /** Matches a metadata line naming the `Branch` label, tolerating every bold
@@ -181,15 +188,28 @@ function findCommitReference(item: DerivedChecklistItem): string | null {
   return extractCommitReference(item.evidence) ?? extractCommitReference(item.rawText);
 }
 
-function toItemModel(item: DerivedChecklistItem): ItemModel {
+/** The first route a task's table rows name, in document order. */
+function findTableRoute(rows: readonly TableEvidenceRow[]): string | null {
+  return rows.find((row) => row.route !== null)?.route ?? null;
+}
+
+/** The commit shown for a task: the one its own inline text names, as
+ * before; only when that names none, the first one its table rows name. */
+function findTableCommit(rows: readonly TableEvidenceRow[]): string | null {
+  return rows.find((row) => row.commit !== null)?.commit ?? null;
+}
+
+function toItemModel(item: DerivedChecklistItem, tableRows: readonly TableEvidenceRow[]): ItemModel {
   return {
     id: item.id,
     title: item.title,
     derivedState: item.derivedState,
-    commitReference: findCommitReference(item),
+    commitReference: findCommitReference(item) ?? findTableCommit(tableRows),
     startLine: item.startLine,
     endLine: item.endLine,
     evidence: item.evidence,
+    route: findTableRoute(tableRows),
+    tableEvidence: tableRows,
   };
 }
 
@@ -202,7 +222,16 @@ function toItemModel(item: DerivedChecklistItem): ItemModel {
 export function buildFeatureModel(featureName: string, documentPath: string, text: string): FeatureModel {
   const structure = parseDocumentStructure(text);
   const checklistSections = parseChecklist(text, structure.sections);
-  const derived = deriveChecklistState(checklistSections);
+
+  // Progress tables are linked to tasks before deriving state, because a
+  // row that proves a task is what keeps its tick from reading unproven.
+  // The next-step section owns no tasks (see the filter below), so its
+  // items are not link targets.
+  const linked = linkProgressEvidence(
+    parseProgressTables(text),
+    checklistSections.filter((s) => s.kind !== 'next-step').flatMap((s) => s.items),
+  );
+  const derived = deriveChecklistState(checklistSections, linked.provenStartLines);
 
   // structure.sections, checklistSections, and derived.sections are all the
   // same length and in the same order: parseChecklist and
@@ -232,7 +261,7 @@ export function buildFeatureModel(featureName: string, documentPath: string, tex
       counts: derivedSection.counts,
       countsTowardProgress: derivedSection.countsTowardProgress,
       headingLine: structure.sections[i].headingLine,
-      items: derivedSection.items.map(toItemModel),
+      items: derivedSection.items.map((item) => toItemModel(item, linked.byTask.get(item.startLine) ?? [])),
     });
   }
 
@@ -248,5 +277,7 @@ export function buildFeatureModel(featureName: string, documentPath: string, tex
     sections,
     nextStep,
     structure,
+    unattachedEvidence: linked.unattached,
+    ambiguousEvidence: linked.ambiguous,
   };
 }

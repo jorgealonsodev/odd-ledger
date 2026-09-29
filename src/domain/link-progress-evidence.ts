@@ -1,0 +1,206 @@
+/**
+ * Links the rows of a document's progress tables to its checklist tasks,
+ * and reads from each row what it contributes: its evidence text, its
+ * commit, its route, and whether it proves anything.
+ *
+ * The rules follow the ledger's one principle, that a tick is not proof:
+ *
+ *  - A row links to a task by ID: the whole first cell (emphasis and code
+ *    markers stripped) equals the ID, else its first whitespace token is a
+ *    valid ID (the checklist parser's own grammar) that equals it. Several
+ *    rows may link to one task; they stay in document order.
+ *  - A row that could link to more than one task (a duplicated ID) is
+ *    ambiguous and links to none: the ledger names it, never guesses.
+ *  - A row that matches no task is unattached: shown at document level,
+ *    counted toward no task.
+ *  - A linked row proves its task only when a cell other than the ID cell
+ *    holds something that is neither empty nor just a dash. A row with
+ *    nothing in it never turns a tick into proof.
+ *
+ * Whether a proven row changes a task's state is decided by the caller
+ * (derive-checklist-state.ts only ever consults it for a checked task), so
+ * a row for an open task is evidence to show, never a state change.
+ *
+ * Plain data transformation, same boundary as the rest of src/domain/.
+ */
+
+import { extractCommitReference } from './derive-checklist-state';
+import { isIdentifierToken } from './parse-checklist';
+import { stripInlineMarkup } from './parse-progress-tables';
+import type { ProgressTable, ProgressTableRow } from './parse-progress-tables';
+
+/** What linking needs to know about a task: its ID (if any) and the line
+ * that identifies it. */
+export interface EvidenceTask {
+  readonly id: string | null;
+  readonly startLine: number;
+}
+
+/** One `Header: cell` pair of a row. `header` is empty for a cell that
+ * sits beyond the table's header row. */
+export interface EvidencePair {
+  readonly header: string;
+  readonly value: string;
+}
+
+/** One progress-table row, with everything the tree and panel need. */
+export interface TableEvidenceRow {
+  /** Where the evidence came from, e.g. `table "Progress / evidence", row 12`. */
+  readonly source: string;
+  readonly heading: string;
+  /** 1-based data-row index within its table. */
+  readonly row: number;
+  /** 1-based document line of the row. */
+  readonly line: number;
+  /** The first cell, emphasis and code markers stripped. */
+  readonly idCell: string;
+  /** Every non-empty cell as `Header: cell`, in column order. */
+  readonly pairs: EvidencePair[];
+  /** The pairs as plain text, one `Header: cell` per line. */
+  readonly text: string;
+  /** The first commit-like token: from a column whose header contains
+   * `commit`, else from any cell other than the ID cell. */
+  readonly commit: string | null;
+  /** The cell under a header containing `route`, when it holds something. */
+  readonly route: string | null;
+  /** Whether a cell other than the ID cell holds something that is neither
+   * empty nor just a dash. */
+  readonly proves: boolean;
+  /** How many tasks the row could link to: 0 unattached, 1 linked, 2+
+   * ambiguous. */
+  readonly matchCount: number;
+}
+
+/** The result of linking every progress-table row of a document. */
+export interface LinkedProgressEvidence {
+  /** Linked rows by the task's `startLine`, in document order. */
+  readonly byTask: ReadonlyMap<number, TableEvidenceRow[]>;
+  /** Rows that match no task: shown at document level, counted nowhere. */
+  readonly unattached: TableEvidenceRow[];
+  /** Rows that match more than one task: linked to none. */
+  readonly ambiguous: TableEvidenceRow[];
+  /** The `startLine` of every task that has at least one proving row. */
+  readonly provenStartLines: ReadonlySet<number>;
+}
+
+/** The label naming where a table row's evidence came from. */
+export function tableSourceLabel(heading: string, row: number): string {
+  return `table "${heading}", row ${row}`;
+}
+
+const DASH_ONLY_RE = /^[—–-]+$/;
+
+/** Whether a cell says nothing: empty, or nothing but dashes. */
+function isBlankCell(cell: string): boolean {
+  const stripped = stripInlineMarkup(cell).trim();
+  return stripped.length === 0 || DASH_ONLY_RE.test(stripped);
+}
+
+function firstToken(text: string): string {
+  return text.split(/\s+/)[0] ?? '';
+}
+
+function findCommit(table: ProgressTable, cells: readonly string[]): string | null {
+  const commitColumns: number[] = [];
+  table.headers.forEach((header, index) => {
+    if (index > 0 && header.toLowerCase().includes('commit')) {
+      commitColumns.push(index);
+    }
+  });
+  for (const index of commitColumns) {
+    const found = extractCommitReference(cells[index] ?? '');
+    if (found) {
+      return found;
+    }
+  }
+  for (let index = 1; index < cells.length; index++) {
+    const found = extractCommitReference(cells[index]);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
+
+function findRoute(table: ProgressTable, cells: readonly string[]): string | null {
+  for (let index = 1; index < table.headers.length; index++) {
+    if (table.headers[index].toLowerCase().includes('route') && !isBlankCell(cells[index] ?? '')) {
+      return cells[index].trim();
+    }
+  }
+  return null;
+}
+
+function buildRow(table: ProgressTable, row: ProgressTableRow, matchCount: number): TableEvidenceRow {
+  const pairs: EvidencePair[] = [];
+  row.cells.forEach((value, index) => {
+    if (value.length > 0) {
+      pairs.push({ header: table.headers[index] ?? '', value });
+    }
+  });
+  return {
+    source: tableSourceLabel(table.heading, row.row),
+    heading: table.heading,
+    row: row.row,
+    line: row.line,
+    idCell: stripInlineMarkup(row.cells[0] ?? ''),
+    pairs,
+    text: pairs.map((pair) => (pair.header ? `${pair.header}: ${pair.value}` : pair.value)).join('\n'),
+    commit: findCommit(table, row.cells),
+    route: findRoute(table, row.cells),
+    proves: row.cells.slice(1).some((cell) => !isBlankCell(cell)),
+    matchCount,
+  };
+}
+
+/** The `startLine`s of the tasks whose ID is `id` (empty for no match). */
+function tasksWithId(byId: ReadonlyMap<string, number[]>, id: string): number[] {
+  return byId.get(id) ?? [];
+}
+
+/**
+ * Links every row of `tables` to `tasks`. See the module note for the
+ * rules; tables and rows are visited in document order, so each task's
+ * rows come out in document order too.
+ */
+export function linkProgressEvidence(tables: readonly ProgressTable[], tasks: readonly EvidenceTask[]): LinkedProgressEvidence {
+  const byId = new Map<string, number[]>();
+  for (const task of tasks) {
+    if (task.id !== null) {
+      byId.set(task.id, [...(byId.get(task.id) ?? []), task.startLine]);
+    }
+  }
+
+  const byTask = new Map<number, TableEvidenceRow[]>();
+  const unattached: TableEvidenceRow[] = [];
+  const ambiguous: TableEvidenceRow[] = [];
+  const provenStartLines = new Set<number>();
+
+  for (const table of tables) {
+    for (const tableRow of table.rows) {
+      const idCell = stripInlineMarkup(tableRow.cells[0] ?? '');
+      let matches = tasksWithId(byId, idCell);
+      if (matches.length === 0) {
+        const token = firstToken(idCell);
+        if (token !== idCell && isIdentifierToken(token)) {
+          matches = tasksWithId(byId, token);
+        }
+      }
+
+      const row = buildRow(table, tableRow, matches.length);
+      if (matches.length === 0) {
+        unattached.push(row);
+      } else if (matches.length > 1) {
+        ambiguous.push(row);
+      } else {
+        const startLine = matches[0];
+        byTask.set(startLine, [...(byTask.get(startLine) ?? []), row]);
+        if (row.proves) {
+          provenStartLines.add(startLine);
+        }
+      }
+    }
+  }
+
+  return { byTask, unattached, ambiguous, provenStartLines };
+}

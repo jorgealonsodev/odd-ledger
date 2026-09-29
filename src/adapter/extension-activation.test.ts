@@ -18,6 +18,8 @@ function item(overrides: Partial<ItemModel> = {}): ItemModel {
     startLine: 1,
     endLine: 1,
     evidence: '',
+    route: null,
+    tableEvidence: [],
     ...overrides,
   };
 }
@@ -124,6 +126,8 @@ suite('Extension activation', () => {
       sections: [],
       nextStep: null,
       structure: EMPTY_DOCUMENT_STRUCTURE,
+      unattachedEvidence: [],
+      ambiguousEvidence: [],
     };
     const node = new FeatureNode(model);
 
@@ -160,6 +164,8 @@ suite('Extension activation', () => {
       sections: [],
       nextStep: null,
       structure: EMPTY_DOCUMENT_STRUCTURE,
+      unattachedEvidence: [],
+      ambiguousEvidence: [],
     };
     const node = new FeatureNode(model);
 
@@ -193,6 +199,8 @@ suite('Extension activation', () => {
       sections: [],
       nextStep: null,
       structure: EMPTY_DOCUMENT_STRUCTURE,
+      unattachedEvidence: [],
+      ambiguousEvidence: [],
     };
     await vscode.commands.executeCommand('oddLedger.openFeature', new FeatureNode(firstModel));
     const firstTab = await waitForWebviewTab('reveal-fixture-first');
@@ -217,6 +225,8 @@ suite('Extension activation', () => {
       sections: [],
       nextStep: null,
       structure: EMPTY_DOCUMENT_STRUCTURE,
+      unattachedEvidence: [],
+      ambiguousEvidence: [],
     };
     await vscode.commands.executeCommand('oddLedger.openFeature', new FeatureNode(secondModel));
 
@@ -249,6 +259,8 @@ suite('Extension activation', () => {
       sections: [],
       nextStep: null,
       structure: EMPTY_DOCUMENT_STRUCTURE,
+      unattachedEvidence: [],
+      ambiguousEvidence: [],
     } satisfies FeatureModel);
     return { featureNode, documentPath };
   }

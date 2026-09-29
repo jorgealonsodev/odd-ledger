@@ -170,15 +170,15 @@ function isProven(item: ChecklistItem): boolean {
   return hasCommitReference(item.rawText);
 }
 
-function deriveItemState(item: ChecklistItem): DerivedItemState {
-  if (item.state === 'done' && !isProven(item)) {
+function deriveItemState(item: ChecklistItem, tableProofLines: ReadonlySet<number>): DerivedItemState {
+  if (item.state === 'done' && !isProven(item) && !tableProofLines.has(item.startLine)) {
     return 'done-unproven';
   }
   return item.state;
 }
 
-function deriveItem(item: ChecklistItem): DerivedChecklistItem {
-  return { ...item, derivedState: deriveItemState(item) };
+function deriveItem(item: ChecklistItem, tableProofLines: ReadonlySet<number>): DerivedChecklistItem {
+  return { ...item, derivedState: deriveItemState(item, tableProofLines) };
 }
 
 /**
@@ -230,14 +230,25 @@ function sumCounts(counts: readonly ChecklistCounts[]): ChecklistCounts {
   return { done, total, percentage, doneUnproven };
 }
 
+const NO_TABLE_PROOF: ReadonlySet<number> = new Set();
+
 /**
  * Derives display state and completion counts from T4's parsed checklist
  * sections: which "done" items are actually unproven, per-section counts,
  * and a per-feature roll-up over the sections that count toward progress.
+ *
+ * `tableProofLines` holds the `startLine` of every item that a progress-
+ * table row proves (see link-progress-evidence.ts). It only ever matters
+ * for a checked item, the one state that can be unproven: a row never
+ * changes an open, declined or unknown item. Left out, the derivation is
+ * exactly what it was before progress tables were read.
  */
-export function deriveChecklistState(sections: readonly ChecklistSection[]): DerivedFeatureState {
+export function deriveChecklistState(
+  sections: readonly ChecklistSection[],
+  tableProofLines: ReadonlySet<number> = NO_TABLE_PROOF,
+): DerivedFeatureState {
   const derivedSections: DerivedChecklistSection[] = sections.map((section) => {
-    const items = section.items.map(deriveItem);
+    const items = section.items.map((item) => deriveItem(item, tableProofLines));
     return {
       heading: section.heading,
       kind: section.kind,

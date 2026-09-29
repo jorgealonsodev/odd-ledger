@@ -326,3 +326,42 @@ test('a whole feature made only of items with no evidence and no reference acros
 
   assert.deepEqual(result.progress, { done: 2, total: 5, percentage: 40, doneUnproven: 0 });
 });
+
+// --- proof read from a progress table ------------------------------------
+
+test('deriveChecklistState leaves a checked item unproven when no table proof is given (v1.1.2 behaviour)', () => {
+  const derived = deriveChecklistState([section({ items: [item({ state: 'done', startLine: 5 })] })]);
+  assert.equal(derived.sections[0].items[0].derivedState, 'done-unproven');
+  assert.equal(derived.progress.doneUnproven, 1);
+});
+
+test('deriveChecklistState treats a checked item whose startLine has table proof as done', () => {
+  const derived = deriveChecklistState(
+    [section({ items: [item({ state: 'done', startLine: 5 }), item({ state: 'done', startLine: 6 })] })],
+    new Set([5]),
+  );
+  assert.deepEqual(
+    derived.sections[0].items.map((i) => i.derivedState),
+    ['done', 'done-unproven'],
+  );
+  assert.equal(derived.progress.doneUnproven, 1);
+});
+
+test('table proof never changes an open, declined or unknown item', () => {
+  const derived = deriveChecklistState(
+    [
+      section({
+        items: [
+          item({ state: 'open', startLine: 1 }),
+          item({ state: 'declined', startLine: 2 }),
+          item({ state: 'unknown', startLine: 3 }),
+        ],
+      }),
+    ],
+    new Set([1, 2, 3]),
+  );
+  assert.deepEqual(
+    derived.sections[0].items.map((i) => i.derivedState),
+    ['open', 'declined', 'unknown'],
+  );
+});
