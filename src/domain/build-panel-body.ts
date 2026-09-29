@@ -20,6 +20,7 @@
  */
 
 import type { FeatureModel, ItemModel, SectionModel } from './build-feature-model';
+import type { TableEvidenceRow } from './link-progress-evidence';
 import type { DocumentSection, SectionKind } from './parse-document-structure';
 
 /**
@@ -69,6 +70,16 @@ export interface PanelBody {
    * document: absence here means the focused-task region renders nothing
    * at all, never a blank placeholder. */
   readonly focusedTask: ItemModel | null;
+  /** Progress-table rows that match no task: shown at document level,
+   * counted toward no task. */
+  readonly unattachedEvidence: readonly TableEvidenceRow[];
+  /** Progress-table rows that match more than one task (a duplicated ID):
+   * linked to none, named as ambiguous. */
+  readonly ambiguousEvidence: readonly TableEvidenceRow[];
+  /** Whether each evidence piece names its source (inline, or table and
+   * row). False for a document with no progress table, so its panel
+   * reads as it always has. */
+  readonly labelEvidenceSources: boolean;
 }
 
 const OBJECTIVE_REGION_KINDS: readonly SectionKind[] = ['objective', 'problem'];
@@ -160,6 +171,18 @@ function findFocusedTask(taskSections: readonly SectionModel[], focusedTaskStart
   return null;
 }
 
+/** Whether the document records any evidence in a progress table: on a
+ * task, or at document level as an unattached or ambiguous row. Only then
+ * does the panel name each evidence piece's source, so a document with no
+ * progress table renders exactly as it always has. */
+function hasTableEvidence(model: FeatureModel): boolean {
+  return (
+    model.unattachedEvidence.length > 0 ||
+    model.ambiguousEvidence.length > 0 ||
+    model.sections.some((section) => section.items.some((item) => item.tableEvidence.length > 0))
+  );
+}
+
 /**
  * Composes the detail panel's body regions from an already-built
  * FeatureModel. See PanelBody for what each region contains and when it
@@ -176,5 +199,8 @@ export function buildPanelBody(model: FeatureModel, focusedTaskStartLine?: numbe
     taskSections: model.sections,
     otherSections: buildOtherSections(sections, claimed),
     focusedTask: findFocusedTask(model.sections, focusedTaskStartLine),
+    unattachedEvidence: model.unattachedEvidence,
+    ambiguousEvidence: model.ambiguousEvidence,
+    labelEvidenceSources: hasTableEvidence(model),
   };
 }

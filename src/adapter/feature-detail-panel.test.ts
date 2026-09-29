@@ -6,6 +6,7 @@ import { buildFeatureModel, EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-fea
 import { UNPROVEN_TASK_MESSAGE } from '../domain/build-panel-body';
 import { HISTORY_CHART_CAPTION, UNAVAILABLE_HISTORY } from '../domain/build-history';
 import type { FeatureHistory } from '../domain/build-history';
+import { PROGRESS_TABLE_DOCUMENT } from '../domain/fixtures/progress-table-documents';
 
 /**
  * Runs in the default @vscode/test-cli configuration, which opens no
@@ -907,5 +908,110 @@ suite('FeatureDetailPanel', () => {
       assert.ok(cy - r >= minY, `circle at cy=${cy} r=${r} is clipped by the viewBox's top edge (minY=${minY})`);
       assert.ok(cy + r <= maxY, `circle at cy=${cy} r=${r} is clipped by the viewBox's bottom edge (maxY=${maxY})`);
     }
+  });
+});
+
+suite('FeatureDetailPanel — progress-table evidence', () => {
+  let panel: FeatureDetailPanel;
+  let extensionUri: vscode.Uri;
+
+  suiteSetup(() => {
+    const extension = vscode.extensions.getExtension('jorgealonsodev.odd-ledger');
+    assert.ok(extension);
+    extensionUri = extension!.extensionUri;
+  });
+
+  teardown(() => {
+    panel?.dispose();
+  });
+
+  function htmlFor(text: string): string {
+    panel = new FeatureDetailPanel(extensionUri);
+    panel.show(modelFromText('sample', text), '/workspace');
+    return panel.webviewPanel?.webview.html ?? '';
+  }
+
+  test('a task proven by a table row shows the row under it with its table and row as the source', () => {
+    const html = htmlFor(PROGRESS_TABLE_DOCUMENT);
+    assert.match(html, /table &quot;Progress \/ evidence&quot;, row 1/);
+    assert.match(html, /<strong>Commit<\/strong>: 7020bc6/);
+    assert.match(html, /RED import error -&gt; GREEN 8 passed/);
+  });
+
+  test('every row of a task is shown, each with its own source, in document order', () => {
+    const html = htmlFor(PROGRESS_TABLE_DOCUMENT);
+    const first = html.indexOf('row 6');
+    const second = html.indexOf('row 7');
+    assert.ok(first > 0 && second > first, 'expected rows 6 and 7 in document order');
+  });
+
+  test('inline evidence is shown first under its own "inline" label, then the table rows', () => {
+    const html = htmlFor(PROGRESS_TABLE_DOCUMENT);
+    const inline = html.indexOf('An inline note');
+    const row = html.indexOf('row 2');
+    assert.ok(inline > 0 && row > inline);
+    assert.match(html, /<div class="evidence-source">inline<\/div>/);
+  });
+
+  test('a checked task whose row says nothing still shows the unproven statement', () => {
+    const html = htmlFor(PROGRESS_TABLE_DOCUMENT);
+    assert.equal(html.split(UNPROVEN_TASK_MESSAGE).length - 1, 2, 'E2-1 and E2-2 stay unproven');
+  });
+
+  test('an unattached row is shown in its own document-level region, never dropped', () => {
+    const html = htmlFor(PROGRESS_TABLE_DOCUMENT);
+    assert.match(html, /Evidence not linked to a task/);
+    assert.match(html, /DP-05 Rueda/);
+  });
+
+  test('an ambiguous row is named as ambiguous in the document-level region', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 First',
+      '- [x] T1 Second',
+      '',
+      '## Progress',
+      '',
+      '| Task | Checks |',
+      '| --- | --- |',
+      '| T1 | passed |',
+    ].join('\n');
+    const html = htmlFor(text);
+    assert.match(html, /Ambiguous/);
+    assert.match(html, /matches 2 tasks/);
+    assert.match(html, /passed/);
+  });
+
+  test('a <script> or image in a cell is neutralised end to end through the panel', () => {
+    const text = [
+      '# sample',
+      '',
+      '## Tasks',
+      '',
+      '- [x] T1 First',
+      '',
+      '## Progress',
+      '',
+      '| Task | Checks | Notes |',
+      '| --- | --- | --- |',
+      '| T1 | <script>alert(1)</script> | ![img](https://example.com/x.png) |',
+      '| Z9 | <script>alert(2)</script> | [x](javascript:alert(3)) |',
+    ].join('\n');
+    const html = htmlFor(text);
+    assert.ok(!html.includes('<script>alert'), 'expected no raw <script> from a cell to reach the page');
+    assert.match(html, /&lt;script&gt;alert\(1\)/);
+    assert.match(html, /&lt;script&gt;alert\(2\)/);
+    assert.ok(!/<img\b/i.test(html), 'expected no <img> element from a cell');
+    assert.ok(!/href\s*=\s*"javascript:/i.test(html), 'expected no javascript: href from a cell');
+  });
+
+  test('a document with no progress table renders no source labels and no document-level region', () => {
+    const html = htmlFor(['# sample', '', '## Tasks', '', '- [x] T1 First', '      Checked by hand.'].join('\n'));
+    assert.ok(!html.includes('class="evidence-source"'));
+    assert.ok(!html.includes('Evidence not linked to a task'));
+    assert.match(html, /Checked by hand/);
   });
 });

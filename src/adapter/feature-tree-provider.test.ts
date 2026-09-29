@@ -9,7 +9,8 @@ import {
   TaskNode,
 } from './feature-tree-provider';
 import type { FeatureModel, ItemModel, NextStepModel, SectionModel } from '../domain/build-feature-model';
-import { EMPTY_DOCUMENT_STRUCTURE } from '../domain/build-feature-model';
+import { EMPTY_DOCUMENT_STRUCTURE, buildFeatureModel } from '../domain/build-feature-model';
+import { PROGRESS_TABLE_DOCUMENT } from '../domain/fixtures/progress-table-documents';
 import type { DerivedItemState } from '../domain/derive-checklist-state';
 
 /**
@@ -578,5 +579,46 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
 
     assert.deepEqual(provider.getChildren(taskNode), []);
     assert.deepEqual(provider.getChildren(nextStepNode), []);
+  });
+});
+
+suite('TaskNode — progress-table evidence', () => {
+  function tableTask(id: string): ItemModel {
+    const model = buildFeatureModel('sample', '/x/sample.md', PROGRESS_TABLE_DOCUMENT);
+    const found = model.sections.flatMap((s) => s.items).find((i) => i.id === id);
+    assert.ok(found);
+    return found!;
+  }
+
+  function nodeFor(model: ItemModel): TaskNode {
+    const parent = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    return new TaskNode(model, parent, '/x/f.md');
+  }
+
+  test('a task proven by a table row shows its commit as the description, not the unproven text', () => {
+    assert.equal(nodeFor(tableTask('E1-4')).description, '7020bc6');
+  });
+
+  test('the tooltip lists each table row under its source', () => {
+    const value = markdownTooltipValue(nodeFor(tableTask('E5-5')).tooltip);
+    assert.match(value, /table "Progress \/ evidence", row 6/);
+    assert.match(value, /table "Progress \/ evidence", row 7/);
+    assert.match(value, /\*\*Commit\*\*: f5fe161/);
+  });
+
+  test('the tooltip labels inline evidence as inline when table rows follow it', () => {
+    const value = markdownTooltipValue(nodeFor(tableTask('E1-5')).tooltip);
+    assert.match(value, /inline/);
+    assert.ok(value.indexOf('An inline note') < value.indexOf('row 2'));
+  });
+
+  test('a task with no table rows has the same tooltip as before: no source labels', () => {
+    const value = markdownTooltipValue(nodeFor(item({ derivedState: 'done', evidence: 'Checked by hand.' })).tooltip);
+    assert.ok(!value.includes('inline'));
+    assert.match(value, /Checked by hand\./);
+  });
+
+  test('a checked task whose row says nothing still reads unproven in the tree', () => {
+    assert.equal(nodeFor(tableTask('E2-1')).description, 'checked, no evidence recorded');
   });
 });
