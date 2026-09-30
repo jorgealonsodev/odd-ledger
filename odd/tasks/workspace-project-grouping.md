@@ -64,6 +64,7 @@ together as if they were one ledger.
 ## Tasks
 
 - [x] T1 Tree: project nodes per workspace folder in multi-root workspaces (domain grouping + `ProjectNode` + provider + tests), README and CHANGELOG alongside.
+- [x] T1b Fix the three review-19126de87d96a1f6 advisories (test file only).
 - [ ] T2 Release 1.3.0: version bump, merge, tag, GitHub release with vsix (awaits user authorization).
 
 ## Acceptance criteria
@@ -82,10 +83,11 @@ together as if they were one ledger.
 
 | Task | Route + trigger | Commit | Checks | Review tier/outcome |
 | --- | --- | --- | --- | --- |
-| T1 | delegated writer (writer trigger: domain grouping, provider, tests, docs) | `bd3aa3e` | RED: compile errors (missing `./group-features-by-project`, no exported `ProjectNode`, unknown `workspaceFolders` option), then GREEN check-types clean, test:domain 494 tests / 491 pass / 0 fail / 3 opt-in skips, test:extension adapter-unit 158 pass (10 new multi-root) + adapter-workspace 27 pass; parent spot check re-ran check-types and test:domain with the same result | pending (assessed after docs commit) |
+| T1 | delegated writer (writer trigger: domain grouping, provider, tests, docs) | `bd3aa3e` (+docs `a6b88ec`) | RED: compile errors (missing `./group-features-by-project`, no exported `ProjectNode`, unknown `workspaceFolders` option), then GREEN check-types clean, test:domain 494 tests / 491 pass / 0 fail / 3 opt-in skips, test:extension adapter-unit 158 pass (10 new multi-root) + adapter-workspace 27 pass; parent spot check re-ran check-types and test:domain with the same result | assessed 9d6285c..a6b88ec: medium (executable change in tree tests), review_due=true (slice_budget_reached, 558 lines) → consent granted → lineage review-19126de87d96a1f6, 1 lens (review-reliability) → **approved**, acknowledged, authority burned; 3 SUGGESTION advisories (R3-001 root-down lookup coverage, R3-002 shadowed `roots` in tests, R3-003 fixture `index: 0`) → T1b |
+| T1b | delegated writer (per-action worker; one test file, host tests take minutes) | `e65cf4c` | R3-001 new root-down test written first and observed passing (coverage addition, production unchanged); R3-002 locals renamed `rootNodes`; R3-003 fixture passes a real per-suite index; check-types clean, test:extension adapter-unit 159 pass + adapter-workspace 27 pass, 0 fail; parent spot check re-ran check-types clean | assessed below |
 
 ## Next step
 
-T1 review assessment, then T2 release 1.3.0 (user authorized on 2026-09-30).
+T2 release 1.3.0 (user authorized on 2026-09-30).
 
 Note: the writer added an injectable `workspaceFolders` provider option (defaults to `vscode.workspace.workspaceFolders`) so multi-root cases are unit-tested with real temp folders; no real multi-root host test was added because the harness opens a single fixture folder.
