@@ -1,9 +1,13 @@
 import * as assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as vscode from 'vscode';
 import {
   FeatureNode,
   FeatureTreeDataProvider,
   NextStepNode,
+  ProjectNode,
   revealTaskArguments,
   SectionNode,
   TaskNode,
@@ -642,5 +646,158 @@ suite('TaskNode — progress-table evidence', () => {
 
   test('a checked task whose entry only echoes a status word reads unproven in the tree', () => {
     assert.equal(nodeFor(listTask('L3')).description, 'checked, no evidence recorded');
+  });
+});
+
+/**
+ * Multi-root grouping. The default test profile opens no workspace folder
+ * and a real multi-root profile is not cheap to launch, so the provider
+ * takes its folder list from an injected function here (the production
+ * default reads `vscode.workspace.workspaceFolders`). Each folder is a real
+ * temp directory holding real feature documents, so discovery, parsing,
+ * filtering and ordering all run for real.
+ */
+suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
+  const roots: string[] = [];
+
+  /** A feature document with `done` checked (proven) tasks out of `total`. */
+  function documentText(name: string, done: number, total: number, unproven = 0): string {
+    const lines = [`# ${name}`, '', '## Tasks', ''];
+    for (let i = 1; i <= total; i++) {
+      if (i <= done - unproven) {
+        lines.push(`- [x] T${i} Task ${i}`, '      DONE `9f8e7d6`', '');
+      } else if (i <= done) {
+        lines.push(`- [x] T${i} Task ${i}`, '');
+      } else {
+        lines.push(`- [ ] T${i} Task ${i}`, '');
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function makeFolder(name: string, features: Record<string, string>): vscode.WorkspaceFolder {
+    const root = mkdtempSync(join(tmpdir(), 'odd-ledger-multi-'));
+    roots.push(root);
+    const dir = join(root, 'odd', 'tasks');
+    mkdirSync(dir, { recursive: true });
+    for (const [file, text] of Object.entries(features)) {
+      writeFileSync(join(dir, `${file}.md`), text);
+    }
+    return { uri: vscode.Uri.file(root), name, index: 0 };
+  }
+
+  function providerFor(folders: vscode.WorkspaceFolder[], sortMode: 'status' | 'name' = 'name'): FeatureTreeDataProvider {
+    return new FeatureTreeDataProvider({ initialSortMode: sortMode, workspaceFolders: () => folders });
+  }
+
+  teardown(() => {
+    for (const root of roots.splice(0)) {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('two folders yield two project nodes, in folder order, holding only their own features', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2), 'a-two': documentText('a-two', 0, 1) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 2, 2) });
+    const provider = providerFor([a, b]);
+
+    const roots = provider.getChildren() as ProjectNode[];
+    assert.deepEqual(roots.map((r) => r.kind), ['project', 'project']);
+    assert.deepEqual(roots.map((r) => r.label), ['alpha-app', 'beta-api']);
+
+    const namesOf = (project: ProjectNode) => (provider.getChildren(project) as FeatureNode[]).map((f) => f.model.featureName);
+    assert.deepEqual(namesOf(roots[0]), ['a-one', 'a-two']);
+    assert.deepEqual(namesOf(roots[1]), ['b-one']);
+  });
+
+  test('a project node shows the aggregate done/total of its features, plus unproven when any', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 2, 3, 1), 'a-two': documentText('a-two', 1, 1) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 4) });
+    const [projectA, projectB] = providerFor([a, b]).getChildren() as ProjectNode[];
+    assert.equal(projectA.description, '3/4 · 1 unproven');
+    assert.equal(projectB.description, '1/4');
+  });
+
+  test('a project node is expanded, uses the root-folder icon, has no command and a path tooltip', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const [project] = providerFor([a, b]).getChildren() as ProjectNode[];
+
+    assert.equal(project.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+    assert.equal(project.contextValue, 'oddLedger.project');
+    assert.equal((project.iconPath as vscode.ThemeIcon).id, 'root-folder');
+    assert.equal(project.command, undefined);
+    assert.equal(project.parent, undefined);
+    const tooltip = project.tooltip as vscode.MarkdownString;
+    assert.ok(tooltip instanceof vscode.MarkdownString);
+    assert.equal(tooltip.isTrusted, false);
+    assert.ok(tooltip.value.includes('odd-ledger-multi-'), `tooltip should carry the folder path: ${tooltip.value}`);
+  });
+
+  test('a folder with no visible feature shows no project node', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
+    const empty = makeFolder('empty-project', {});
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const roots = providerFor([a, empty, b]).getChildren() as ProjectNode[];
+    assert.deepEqual(roots.map((r) => r.label), ['alpha-app', 'beta-api']);
+  });
+
+  test('the active filter applies per project and hides a project left with nothing', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2, 1) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const provider = providerFor([a, b]);
+    provider.setFilter('unproven');
+
+    const roots = provider.getChildren() as ProjectNode[];
+    assert.deepEqual(roots.map((r) => r.label), ['alpha-app']);
+    assert.equal(roots[0].description, '1/2 · 1 unproven');
+  });
+
+  test('sorting is per project, not global', () => {
+    // Under "status", each project puts its own open feature first. A
+    // global sort would interleave them; per-project order keeps each
+    // project's closed feature last inside that project.
+    const a = makeFolder('alpha-app', { 'a-closed': documentText('a-closed', 1, 1), 'a-open': documentText('a-open', 0, 1) });
+    const b = makeFolder('beta-api', { 'b-closed': documentText('b-closed', 1, 1), 'b-open': documentText('b-open', 0, 1) });
+    const provider = providerFor([a, b], 'status');
+    const roots = provider.getChildren() as ProjectNode[];
+    const names = (p: ProjectNode) => (provider.getChildren(p) as FeatureNode[]).map((f) => f.model.featureName);
+    assert.deepEqual(names(roots[0]), ['a-open', 'a-closed']);
+    assert.deepEqual(names(roots[1]), ['b-open', 'b-closed']);
+  });
+
+  test('getParent of a feature is its project node; of a project node, undefined', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const provider = providerFor([a, b]);
+    const [project] = provider.getChildren() as ProjectNode[];
+    const [feature] = provider.getChildren(project) as FeatureNode[];
+    assert.equal(provider.getParent(feature), project);
+    assert.equal(provider.getParent(project), undefined);
+  });
+
+  test('task -> section -> feature -> project chain resolves for open-task', () => {
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const provider = providerFor([a, b]);
+    const [project] = provider.getChildren() as ProjectNode[];
+    const [featureNode] = provider.getChildren(project) as FeatureNode[];
+    const [sectionNode] = provider.getChildren(featureNode) as SectionNode[];
+    const [task] = provider.getChildren(sectionNode) as TaskNode[];
+    assert.equal(task.parent.parent, featureNode);
+    assert.equal(featureNode.parent, project);
+  });
+
+  test('one folder keeps the flat feature list with no project node', () => {
+    const only = makeFolder('solo', { 'a-one': documentText('a-one', 1, 2), 'b-one': documentText('b-one', 0, 1) });
+    const provider = providerFor([only]);
+    const roots = provider.getChildren();
+    assert.deepEqual(roots.map((r) => r.kind), ['feature', 'feature']);
+    assert.equal((roots[0] as FeatureNode).parent, undefined);
+    assert.equal(provider.getParent(roots[0]), undefined);
+  });
+
+  test('zero folders yield an empty root', () => {
+    assert.deepEqual(providerFor([]).getChildren(), []);
   });
 });

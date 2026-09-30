@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0 (unreleased)
+
+In a multi-root workspace the tree now tells projects apart.
+
+- With two or more workspace folders, the root shows one **project node** per folder (in
+  workspace order), labelled with the folder's name, with its path as the tooltip and the
+  aggregate `done/total` (plus ` · N unproven`) of its visible features. Each project holds only
+  its own features.
+- Filter and sort apply within each project. A folder with no feature visible under the active
+  filter shows no project node.
+- A workspace with zero or one folder is unchanged: features stay at the root, with no project
+  node.
+
 ## 1.2.2
 
 An entry or a table row that names several tasks now counts for all of them.
