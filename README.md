@@ -48,6 +48,12 @@ read as answers when the truth is that nobody said.
 | Detail panel | The next step first, then progress, unproven and last-work tiles, the objective, every task with its evidence, the fields the document records, and the history |
 | History | Reconstructed from git: a sentence with the revision count and date range, and a chart once there are enough revisions to be worth plotting |
 
+In a multi-root workspace (two or more folders), the tree groups features by project: one node
+per workspace folder, labelled with the folder's name, showing the done/total of its features
+(plus the unproven count) and holding only that folder's features. Filter and sort apply inside
+each project, and a folder with nothing to show under the active filter is left out. A workspace
+with a single folder is unchanged: features sit at the root with no project node.
+
 Click a feature to open the panel. Click a task to open the panel focused on that task and
 jump to its line in the document. Hover anything to read it in full.
 

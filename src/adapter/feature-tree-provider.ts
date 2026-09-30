@@ -7,7 +7,9 @@
  * without an editor stays in src/domain/, not here.
  *
  * T8 introduces the real hierarchy: feature -> section -> task, plus a
- * next-step leaf pinned as the feature's last child. Filter, ordering of
+ * next-step leaf pinned as the feature's last child. In a multi-root
+ * workspace a project node (one per workspace folder) sits above the
+ * features. Filter, ordering of
  * closed features, and reveal-on-click are T9's job; the detail panel is
  * T10-T12; the file watcher is T15.
  */
@@ -31,6 +33,8 @@ import {
 import type { LedgerFilter, LedgerSortMode, RollupState } from '../domain/filter-and-order-features';
 import type { FetchCreationDate } from '../domain/feature-creation-date-cache';
 import { FeatureCreationDateCache } from '../domain/feature-creation-date-cache';
+import type { ProjectGroup } from '../domain/group-features-by-project';
+import { groupFeaturesByProject } from '../domain/group-features-by-project';
 import { ROLLUP_COLOR_TOKEN, ROLLUP_ICON_ID, STATE_COLOR_TOKEN } from '../domain/state-colors';
 
 /** Counts reported when a document cannot be read or parsed: the same
@@ -63,14 +67,20 @@ function emptyFeatureModel(featureName: string, documentPath: string): FeatureMo
 /** The union of every node kind the tree can show. `getParent` and
  * `getChildren` both switch on `kind` rather than `instanceof`, so the
  * discriminant is explicit and does not rely on prototype identity. */
-export type LedgerTreeNode = FeatureNode | SectionNode | TaskNode | NextStepNode;
+export type LedgerTreeNode = ProjectNode | FeatureNode | SectionNode | TaskNode | NextStepNode;
 
-function formatFeatureDescription(model: FeatureModel): string {
-  const counts = model.progress;
+/** The `done/total` text shared by a feature and a project node, with the
+ * unproven count appended only when there is one. */
+function formatCountsDescription(counts: ChecklistCounts): string {
   let description = `${counts.done}/${counts.total}`;
   if (counts.doneUnproven > 0) {
     description += ` · ${counts.doneUnproven} unproven`;
   }
+  return description;
+}
+
+function formatFeatureDescription(model: FeatureModel): string {
+  let description = formatCountsDescription(model.progress);
   if (model.branch) {
     description += ` · ${model.branch}`;
   }
@@ -127,19 +137,56 @@ function rollupThemeIcon(rollup: RollupState, fallbackIconId: string): vscode.Th
 }
 
 /**
- * One feature document rendered as the tree's root node for that feature.
- * Its children are its item-bearing sections, plus a trailing next-step
- * node when the document records one (see FeatureTreeDataProvider).
+ * One workspace folder ("project") in a multi-root workspace: the root
+ * node that groups that folder's features, so features from different
+ * projects are never mixed in one flat list. It exists only when the
+ * workspace has two or more folders; a single-folder workspace keeps
+ * features at the root and never shows one. It is not clickable: it only
+ * groups, so it carries no `command`. The aggregate description sums the
+ * project's visible features (see groupFeaturesByProject).
+ */
+export class ProjectNode extends vscode.TreeItem {
+  readonly kind = 'project' as const;
+  /** A project is always a root node: nothing sits above it. Explicit so
+   * every LedgerTreeNode has a uniform `.parent`, which keeps getParent a
+   * one-line lookup. */
+  readonly parent: undefined = undefined;
+
+  constructor(
+    public readonly folderName: string,
+    public readonly folderPath: string,
+    public readonly group: ProjectGroup,
+  ) {
+    super(folderName, vscode.TreeItemCollapsibleState.Expanded);
+    this.description = formatCountsDescription(group.progress);
+    // `appendText` escapes the path: it is environment-controlled text this
+    // extension does not author. isTrusted stays off, like every tooltip
+    // in this tree.
+    const tooltip = new vscode.MarkdownString();
+    tooltip.appendText(folderPath);
+    tooltip.isTrusted = false;
+    this.tooltip = tooltip;
+    this.iconPath = new vscode.ThemeIcon('root-folder');
+    this.contextValue = 'oddLedger.project';
+  }
+}
+
+/**
+ * One feature document rendered as a node. It is a root node in a
+ * single-folder workspace and a child of its ProjectNode in a multi-root
+ * one. Its children are its item-bearing sections, plus a trailing
+ * next-step node when the document records one (see FeatureTreeDataProvider).
  */
 export class FeatureNode extends vscode.TreeItem {
   readonly kind = 'feature' as const;
-  /** A feature is always a root node: there is nothing above it in this
-   * tree. Kept as an explicit field (rather than left off the type) so
-   * every LedgerTreeNode has a uniform `.parent`, which is exactly what
-   * getParent needs to stay a one-line lookup. */
-  readonly parent: undefined = undefined;
 
-  constructor(public readonly model: FeatureModel) {
+  /** `parent` is the feature's project node in a multi-root workspace and
+   * `undefined` when the feature is a root node. Keeping it a field on
+   * every node kind is what lets getParent stay a one-line lookup. */
+  constructor(
+    public readonly model: FeatureModel,
+    public readonly parent: ProjectNode | undefined = undefined,
+  ) {
     super(model.featureName, vscode.TreeItemCollapsibleState.Expanded);
     this.description = formatFeatureDescription(model);
     this.tooltip = formatFeatureTooltip(model);
@@ -374,13 +421,14 @@ export class NextStepNode extends vscode.TreeItem {
  * discovered under every open workspace folder's `odd/tasks/`, each
  * expanding into its item-bearing sections and, last, its next-step node.
  *
- * Multi-root decision: a feature is not scoped to "its" folder in this
- * view. Every open workspace folder is scanned with the same domain-layer
- * discovery function, and every feature document found in any of them
- * becomes a root node in one flat list — there is no per-folder grouping
- * level, because nothing in the interface calls for one and a typical
- * project has one or two features total, not per folder. The list's order
- * is a separate decision — see "Sort mode" below.
+ * Multi-root decision: every open workspace folder is scanned with the
+ * same domain-layer discovery function. With two or more folders the root
+ * is one ProjectNode per folder that has a feature visible under the
+ * active filter (folder order), each holding its own features, so
+ * features from different projects are never shown as one mixed list.
+ * With zero or one folder there is nothing to tell apart, so features stay
+ * at the root with no wrapper — the common case is unchanged. Sorting is
+ * per project; see "Sort mode" below for the order itself.
  *
  * No-workspace decision: a window with no workspace folder at all
  * (`vscode.workspace.workspaceFolders` is `undefined`) produces the same
@@ -433,6 +481,12 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
    * mode. See FeatureCreationDateCache's own doc for its caching policy. */
   private readonly creationDateCache: FeatureCreationDateCache;
 
+  /** Where the workspace folders come from. The production default reads
+   * `vscode.workspace.workspaceFolders` on every call (folders can be
+   * added or removed at runtime); tests inject a fixed list because the
+   * default test profile opens no folder. */
+  private readonly workspaceFolders: () => readonly vscode.WorkspaceFolder[];
+
   constructor(options?: {
     /** Overrides the default `created` sort mode, e.g. with a mode
      * restored from persisted state. */
@@ -442,7 +496,11 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
     /** The git-backed creation-date lookup `created` mode uses. Defaults
      * to a no-op that always reports "unknown" — see the class doc. */
     fetchCreationDate?: FetchCreationDate;
+    /** Overrides where workspace folders come from. Defaults to
+     * `vscode.workspace.workspaceFolders`. */
+    workspaceFolders?: () => readonly vscode.WorkspaceFolder[];
   }) {
+    this.workspaceFolders = options?.workspaceFolders ?? (() => vscode.workspace.workspaceFolders ?? []);
     this.sortMode = options?.initialSortMode ?? 'created';
     this.persistSortMode = options?.persistSortMode ?? (() => {});
     this.creationDateCache = new FeatureCreationDateCache(options?.fetchCreationDate ?? (async () => null));
@@ -491,6 +549,9 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
     if (!element) {
       return this.discoverFeatures();
     }
+    if (element.kind === 'project') {
+      return this.orderedFeatureNodes(element.group.models, element);
+    }
     if (element.kind === 'feature') {
       return this.childrenOfFeature(element);
     }
@@ -516,9 +577,9 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
     return children;
   }
 
-  private discoverFeatures(): FeatureNode[] {
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    const models: FeatureModel[] = [];
+  private discoverFeatures(): Array<ProjectNode | FeatureNode> {
+    const folders = this.workspaceFolders();
+    const entries: Array<{ folderPath: string; model: FeatureModel }> = [];
 
     for (const folder of folders) {
       for (const document of discoverFeatureDocuments(folder.uri.fsPath)) {
@@ -528,7 +589,7 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
         // done-unproven items under "Unproven") is not shown at all,
         // rather than rendering an empty shell.
         if (filtered) {
-          models.push(filtered);
+          entries.push({ folderPath: folder.uri.fsPath, model: filtered });
           // Only `created` mode ever needs a creation date, so this is
           // the only mode that ever starts a git-backed fetch: `status`
           // and `name` never spawn anything, however many features exist.
@@ -539,8 +600,29 @@ export class FeatureTreeDataProvider implements vscode.TreeDataProvider<LedgerTr
       }
     }
 
+    // One folder (or none): no project level, features at the root, sorted
+    // exactly as before.
+    if (folders.length < 2) {
+      return this.orderedFeatureNodes(
+        entries.map((entry) => entry.model),
+        undefined,
+      );
+    }
+
+    // Groups come out in workspace-folder order, and a folder without a
+    // visible feature produced no entry, so it has no group.
+    const nameByPath = new Map(folders.map((folder) => [folder.uri.fsPath, folder.name]));
+    return groupFeaturesByProject(entries).map(
+      (group) => new ProjectNode(nameByPath.get(group.folderPath) ?? group.folderPath, group.folderPath, group),
+    );
+  }
+
+  /** Orders `models` by the active sort mode and wraps them in feature
+   * nodes under `parent`. Called once per project (or once for the whole
+   * flat list), which is what makes sorting per project. */
+  private orderedFeatureNodes(models: readonly FeatureModel[], parent: ProjectNode | undefined): FeatureNode[] {
     const ordered = orderFeatures(models, this.sortMode, (path) => this.creationDateCache.get(path));
-    return ordered.map((model) => new FeatureNode(model));
+    return ordered.map((model) => new FeatureNode(model, parent));
   }
 
   /**
