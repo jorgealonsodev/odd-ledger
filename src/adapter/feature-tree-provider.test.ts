@@ -659,6 +659,8 @@ suite('TaskNode — progress-table evidence', () => {
  */
 suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
   const roots: string[] = [];
+  /** Folders made so far, so each fixture gets its real position as `index`. */
+  let madeFolders = 0;
 
   /** A feature document with `done` checked (proven) tasks out of `total`. */
   function documentText(name: string, done: number, total: number, unproven = 0): string {
@@ -683,7 +685,7 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     for (const [file, text] of Object.entries(features)) {
       writeFileSync(join(dir, `${file}.md`), text);
     }
-    return { uri: vscode.Uri.file(root), name, index: 0 };
+    return { uri: vscode.Uri.file(root), name, index: madeFolders++ };
   }
 
   function providerFor(folders: vscode.WorkspaceFolder[], sortMode: 'status' | 'name' = 'name'): FeatureTreeDataProvider {
@@ -691,6 +693,7 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
   }
 
   teardown(() => {
+    madeFolders = 0;
     for (const root of roots.splice(0)) {
       rmSync(root, { recursive: true, force: true });
     }
@@ -701,13 +704,13 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 2, 2) });
     const provider = providerFor([a, b]);
 
-    const roots = provider.getChildren() as ProjectNode[];
-    assert.deepEqual(roots.map((r) => r.kind), ['project', 'project']);
-    assert.deepEqual(roots.map((r) => r.label), ['alpha-app', 'beta-api']);
+    const rootNodes = provider.getChildren() as ProjectNode[];
+    assert.deepEqual(rootNodes.map((r) => r.kind), ['project', 'project']);
+    assert.deepEqual(rootNodes.map((r) => r.label), ['alpha-app', 'beta-api']);
 
     const namesOf = (project: ProjectNode) => (provider.getChildren(project) as FeatureNode[]).map((f) => f.model.featureName);
-    assert.deepEqual(namesOf(roots[0]), ['a-one', 'a-two']);
-    assert.deepEqual(namesOf(roots[1]), ['b-one']);
+    assert.deepEqual(namesOf(rootNodes[0]), ['a-one', 'a-two']);
+    assert.deepEqual(namesOf(rootNodes[1]), ['b-one']);
   });
 
   test('a project node shows the aggregate done/total of its features, plus unproven when any', () => {
@@ -738,8 +741,8 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
     const empty = makeFolder('empty-project', {});
     const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
-    const roots = providerFor([a, empty, b]).getChildren() as ProjectNode[];
-    assert.deepEqual(roots.map((r) => r.label), ['alpha-app', 'beta-api']);
+    const rootNodes = providerFor([a, empty, b]).getChildren() as ProjectNode[];
+    assert.deepEqual(rootNodes.map((r) => r.label), ['alpha-app', 'beta-api']);
   });
 
   test('the active filter applies per project and hides a project left with nothing', () => {
@@ -748,9 +751,9 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     const provider = providerFor([a, b]);
     provider.setFilter('unproven');
 
-    const roots = provider.getChildren() as ProjectNode[];
-    assert.deepEqual(roots.map((r) => r.label), ['alpha-app']);
-    assert.equal(roots[0].description, '1/2 · 1 unproven');
+    const rootNodes = provider.getChildren() as ProjectNode[];
+    assert.deepEqual(rootNodes.map((r) => r.label), ['alpha-app']);
+    assert.equal(rootNodes[0].description, '1/2 · 1 unproven');
   });
 
   test('sorting is per project, not global', () => {
@@ -760,10 +763,10 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     const a = makeFolder('alpha-app', { 'a-closed': documentText('a-closed', 1, 1), 'a-open': documentText('a-open', 0, 1) });
     const b = makeFolder('beta-api', { 'b-closed': documentText('b-closed', 1, 1), 'b-open': documentText('b-open', 0, 1) });
     const provider = providerFor([a, b], 'status');
-    const roots = provider.getChildren() as ProjectNode[];
+    const rootNodes = provider.getChildren() as ProjectNode[];
     const names = (p: ProjectNode) => (provider.getChildren(p) as FeatureNode[]).map((f) => f.model.featureName);
-    assert.deepEqual(names(roots[0]), ['a-open', 'a-closed']);
-    assert.deepEqual(names(roots[1]), ['b-open', 'b-closed']);
+    assert.deepEqual(names(rootNodes[0]), ['a-open', 'a-closed']);
+    assert.deepEqual(names(rootNodes[1]), ['b-open', 'b-closed']);
   });
 
   test('getParent of a feature is its project node; of a project node, undefined', () => {
@@ -788,13 +791,33 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     assert.equal(featureNode.parent, project);
   });
 
+  test('a task resolves from the root down through getChildren and walks getParent back to its project', () => {
+    // The chain a host reveal relies on: only getChildren going down from the
+    // root, then only getParent going up, landing on the same project instance.
+    const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
+    const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
+    const provider = providerFor([a, b]);
+    const [, project] = provider.getChildren() as ProjectNode[];
+    const [feature] = provider.getChildren(project) as FeatureNode[];
+    const [section] = provider.getChildren(feature) as SectionNode[];
+    const [task] = provider.getChildren(section) as TaskNode[];
+
+    const section2 = provider.getParent(task);
+    const feature2 = section2 && provider.getParent(section2);
+    const project2 = feature2 && provider.getParent(feature2);
+    assert.equal(section2?.kind, 'section');
+    assert.equal(feature2?.kind, 'feature');
+    assert.equal(project2, project);
+    assert.equal(provider.getParent(project2 as ProjectNode), undefined);
+  });
+
   test('one folder keeps the flat feature list with no project node', () => {
     const only = makeFolder('solo', { 'a-one': documentText('a-one', 1, 2), 'b-one': documentText('b-one', 0, 1) });
     const provider = providerFor([only]);
-    const roots = provider.getChildren();
-    assert.deepEqual(roots.map((r) => r.kind), ['feature', 'feature']);
-    assert.equal((roots[0] as FeatureNode).parent, undefined);
-    assert.equal(provider.getParent(roots[0]), undefined);
+    const rootNodes = provider.getChildren();
+    assert.deepEqual(rootNodes.map((r) => r.kind), ['feature', 'feature']);
+    assert.equal((rootNodes[0] as FeatureNode).parent, undefined);
+    assert.equal(provider.getParent(rootNodes[0]), undefined);
   });
 
   test('zero folders yield an empty root', () => {
