@@ -11,7 +11,7 @@ Branch: feat/unfocused-update-badge. Preserve existing untracked PRD.md and .vsc
 
 ## Tasks
 - [x] T1 — Implement and verify the unfocused update badge with deterministic tests and brief user documentation. Commit: `4fbbfc2`.
-- [ ] T2 — Clear the badge when the user actually sees the view instead of when the window regains focus. **In progress.**
+- [x] T2 — Clear the badge when the user actually sees the view instead of when the window regains focus. Commit: `5b61d1e`; released and installed as 1.3.2.
 
 ## T2 acceptance and checks
 Accepted change after the badge proved invisible in practice: focus regain alone cleared it before the user could read it (proven by the T1 test at `src/adapter/update-badge.test.ts`). T1 behavior is superseded, not reverted; its counting rules stay.
@@ -36,8 +36,17 @@ Implemented distinct-path state, native badge adapter and lifecycle wiring; READ
 
 No manual visual/theme check or end-to-end watcher-to-badge assertion was performed. Deterministic adapter tests and structural wiring verification passed. Commit `4fbbfc2` contains behavior, tests and README; original unrelated untracked files remain untouched.
 
+## T2 progress and evidence
+Test-first observed: RED with the new-contract tests against a compile-only skeleton kept on the old focus-only clearing (domain 5 failing, adapter 5 failing, exactly the new behaviors). GREEN after implementation: domain 506 tests with 503 passing, 0 failing, 3 opt-in corpus checks skipped; extension 170 adapter-unit plus 27 workspace passing, 0 failing. Parent spot check repeated `npm run check-types` successfully and `git diff --check` clean.
+
+Native review for this candidate did NOT complete: lineage `review-fa7774fa78a83433` started at high tier with four lenses, and the host relay failed with a model-provider safeguard error before any reviewer ran. No reviewer verdict exists and no authority was burned. That is a provider-side failure, not a finding against this code. An independent verifier was launched instead, per the risk-gated plan.
+
+Packaged and installed at the user's explicit request: `dist/extension.js.map` was again left behind by the production build and was preserved as `out/extension.js.map.pre-package-132` before packaging. `odd-ledger-1.3.2.vsix` is 10 files / 152.52 KB, direct package tests 18 passed and 0 failed, and `code --list-extensions --show-versions` reports `jorgealonsodev.odd-ledger@1.3.2`.
+
+Still unverified: the badge has never been observed visually in a running window. That remains the user's manual check.
+
 ## Next step
-Deliver T2, then repackage and reinstall so the badge can finally be observed. A periodic polling fallback for missed watcher events remains an open user question, deliberately out of T2 scope. No push or PR performed.
+User reloads VS Code, then leaves the Features view hidden, changes a task document, and confirms the badge appears on the activity-bar icon and clears when the view is opened. A periodic polling fallback for missed watcher events remains an open user question, deliberately out of T2 scope. The incomplete native review may be retried on a later candidate. No push or PR performed.
 
 ## T1 closing note
 Manual observation of T1 was never possible: the X11 smoke test never reached badge capture and was cancelled to stop interfering with the desktop, so no screenshot evidence exists. The invisibility was diagnosed from the implementation and its own tests, not from a captured image.
