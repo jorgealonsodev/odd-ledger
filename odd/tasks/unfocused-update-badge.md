@@ -47,8 +47,15 @@ Independent verification of commit `5b61d1e`: types clean, `git diff --check` cl
 
 Still unverified: the badge has never been observed visually in a running window. That remains the user's manual check.
 
+## T3 — activate before the view is opened
+Live observation disproved the assumption that the badge could work as shipped. With `"activationEvents": []` and a contributed view, VS Code activates this extension only when its Features view first becomes visible in that window, so no watcher runs beforehand and no badge can appear. Evidence, captured in a real window: after a reload with the view hidden, creating an `odd/tasks` document produced no badge while Source Control's own badge updated live; after opening the ODD Ledger view once and switching the sidebar away, a second new document produced the expected purple `1`. The badge logic was never at fault.
+
+Fixed in commit `b40c309` by declaring `"activationEvents": ["onStartupFinished"]`, released as 1.3.3. Deliberately not `*`, so startup is not delayed; the trade-off is that the extension now activates in every window after startup. A structural test in `scripts/verify-package.test.js` asserts the event is declared and that `*` is not, observed failing before the change and passing after. Checks: types clean, domain 506 tests with 503 passing and 3 opt-in skips, extension 170 plus 27 passing, package suite 19 passing after a production build.
+
+Delivery is blocked, and not by this code: `code --profile Claude --install-extension` reports success and unpacks `jorgealonsodev.odd-ledger-1.3.3` with the correct manifest, but `~/.vscode/extensions/extensions.json` keeps listing 1.3.2 while that VS Code instance is running, so the window reloads the old build. The post-fix badge behaviour therefore remains unverified. Installing from the running VS Code UI, or with VS Code closed, is required before it can be observed.
+
 ## Next step
-User reloads VS Code, then leaves the Features view hidden, changes a task document, and confirms the badge appears on the activity-bar icon and clears when the view is opened. A periodic polling fallback for missed watcher events remains an open user question, deliberately out of T2 scope. The incomplete native review may be retried on a later candidate. No push or PR performed.
+Install `odd-ledger-1.3.3.vsix` through the running VS Code (Extensions: Install from VSIX) or with VS Code closed, confirm `extensions.json` lists 1.3.3, then reload, leave the Features view hidden, change a task document, and confirm the badge appears without opening the view first. A periodic polling fallback for missed watcher events remains an open user question, deliberately out of T2 scope. The incomplete native review may be retried on a later candidate. No push or PR performed.
 
 ## T1 closing note
 Manual observation of T1 was never possible: the X11 smoke test never reached badge capture and was cancelled to stop interfering with the desktop, so no screenshot evidence exists. The invisibility was diagnosed from the implementation and its own tests, not from a captured image.
