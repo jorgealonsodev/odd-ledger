@@ -43,6 +43,8 @@ Native review for this candidate did NOT complete: lineage `review-fa7774fa78a83
 
 Packaged and installed at the user's explicit request: `dist/extension.js.map` was again left behind by the production build and was preserved as `out/extension.js.map.pre-package-132` before packaging. `odd-ledger-1.3.2.vsix` is 10 files / 152.52 KB, direct package tests 18 passed and 0 failed, and `code --list-extensions --show-versions` reports `jorgealonsodev.odd-ledger@1.3.2`.
 
+Independent verification of commit `5b61d1e`: types clean, `git diff --check` clean, domain 506 tests with 503 passing and 3 opt-in skips, run twice with the same result, and a line-by-line confirmation of the seen contract, the distinct-path counting, both listener subscriptions and disposals, the `extension.ts` wiring and the untouched 1.3.0 grouping source. The verifier skipped the extension suite to avoid rebuilding a packaged `dist/`; the parent then ran it directly and observed 170 adapter-unit plus 27 workspace tests passing with exit 0, confirming the VSIX sha256 and the installed 1.3.2 were both unaffected.
+
 Still unverified: the badge has never been observed visually in a running window. That remains the user's manual check.
 
 ## Next step
