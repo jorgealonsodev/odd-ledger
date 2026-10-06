@@ -39,11 +39,19 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(treeView);
 
-  const updateBadge = new UpdateBadge(treeView, {
-    focused: vscode.window.state.focused,
-    onDidChangeFocus: (listener) =>
-      vscode.window.onDidChangeWindowState((state) => listener(state.focused)),
-  });
+  const updateBadge = new UpdateBadge(
+    treeView,
+    {
+      focused: vscode.window.state.focused,
+      onDidChangeFocus: (listener) =>
+        vscode.window.onDidChangeWindowState((state) => listener(state.focused)),
+    },
+    {
+      visible: treeView.visible,
+      onDidChangeVisibility: (listener) =>
+        treeView.onDidChangeVisibility((event) => listener(event.visible)),
+    },
+  );
   context.subscriptions.push(updateBadge);
 
   const refreshCommand = vscode.commands.registerCommand('oddLedger.refresh', () => {
@@ -134,7 +142,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // Everything activate() created (the tree view, its focus-aware badge,
+  // Everything activate() created (the tree view, its focus- and visibility-aware badge,
   // the detail panel manager, the refresh command, openFeature, openTask,
   // the three filter commands, selectSortMode, and the document watcher) is a disposable
   // pushed to context.subscriptions, so VS Code tears it down on its own.

@@ -11,8 +11,19 @@ Branch: feat/unfocused-update-badge. Preserve existing untracked PRD.md and .vsc
 
 ## Tasks
 - [x] T1 — Implement and verify the unfocused update badge with deterministic tests and brief user documentation. Commit: `4fbbfc2`.
+- [ ] T2 — Clear the badge when the user actually sees the view instead of when the window regains focus. **In progress.**
 
-## Acceptance and checks
+## T2 acceptance and checks
+Accepted change after the badge proved invisible in practice: focus regain alone cleared it before the user could read it (proven by the T1 test at `src/adapter/update-badge.test.ts`). T1 behavior is superseded, not reverted; its counting rules stay.
+
+- "Seen" means the window is focused **and** the Features view is visible; only that transition clears the badge and its pending paths.
+- While not seen, distinct touched paths accumulate across watcher batches, whether the window is unfocused, the view is hidden, or both.
+- Returning to a focused window with the view hidden keeps the badge visible until the view is opened.
+- Updates arriving while the view is seen never create a badge.
+- Subscribe and dispose the view-visibility listener alongside the existing focus listener.
+- Test-first with deterministic tests; run type checks, domain and extension suites; native review before delivery.
+
+## T1 acceptance and checks
 - Updates while focused do not create a badge.
 - While unfocused, distinct touched paths accumulate; repeated paths count once, empty batches do not increment.
 - Initial unfocused state is respected, focus regain clears state and badge, next blur starts clean.
@@ -26,4 +37,7 @@ Implemented distinct-path state, native badge adapter and lifecycle wiring; READ
 No manual visual/theme check or end-to-end watcher-to-badge assertion was performed. Deterministic adapter tests and structural wiring verification passed. Commit `4fbbfc2` contains behavior, tests and README; original unrelated untracked files remain untouched.
 
 ## Next step
-Launch the Extension Development Host and manually confirm activity-bar appearance with focus loss, an external task-document edit, and refocus. No push, PR, version bump or VSIX packaging performed.
+Deliver T2, then repackage and reinstall so the badge can finally be observed. A periodic polling fallback for missed watcher events remains an open user question, deliberately out of T2 scope. No push or PR performed.
+
+## T1 closing note
+Manual observation of T1 was never possible: the X11 smoke test never reached badge capture and was cancelled to stop interfering with the desktop, so no screenshot evidence exists. The invisibility was diagnosed from the implementation and its own tests, not from a captured image.

@@ -42,7 +42,7 @@ read as answers when the truth is that nobody said.
 
 | Where | What it shows |
 |-------|---------------|
-| Activity-bar badge | Distinct task documents changed automatically while the window was unfocused; clears on refocus and uses the active VS Code theme |
+| Activity-bar badge | Distinct task documents changed automatically while you could not see the Features view (window unfocused, view hidden, or both); clears once the window is focused and the view is visible, and uses the active VS Code theme |
 | Sidebar tree | Each feature, its sections and its tasks. A state icon, the identifier exactly as written, and the commit the evidence names |
 | Filters | `All`, `Open`, `Unproven`, from the view's toolbar |
 | Sort | `Created` (oldest feature first, by its first commit — the default), `Status` (open first, closed last), `Name` (alphabetical), from the view's toolbar. The choice is remembered |

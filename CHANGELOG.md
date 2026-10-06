@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2
+
+The activity-bar badge for automatic task-document changes now clears when you actually see the Features view, not when the window regains focus.
+
+- The badge counts distinct task documents changed, created or deleted under `odd/tasks/*.md` while the window is unfocused, the Features view is hidden, or both. It clears only once the window is focused **and** the view is visible, so refocusing with the view hidden keeps the badge until you open the view.
+- Changes that arrive while you can already see the view never create a badge. The 1.3.1 counting is unchanged: repeated saves of one document count once, and manual refreshes and workspace-folder-only refreshes do not count.
+- The badge tooltip now reads "changed since you last saw this view".
+
 ## 1.3.1
 
 Adds a native activity-bar badge for automatic task-document changes received while the VS Code window is unfocused.
