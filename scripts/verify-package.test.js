@@ -178,3 +178,18 @@ test('declares itself unsupported in untrusted (Restricted Mode) workspaces, exp
   );
   assert.ok(pkg.capabilities.untrustedWorkspaces.description.length > 0);
 });
+
+// unfocused-update-badge: with an empty activationEvents list VS Code only
+// activates the extension once its Features view first becomes visible, so
+// the task-document watcher never runs and the activity-bar badge cannot
+// appear until then. onStartupFinished activates it in the background after
+// startup, without delaying it the way "*" would.
+test('activates on startup finished, so the update badge works before the view is first opened', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+  assert.ok(Array.isArray(pkg.activationEvents), 'expected "activationEvents" to be an array in package.json');
+  assert.ok(
+    pkg.activationEvents.includes('onStartupFinished'),
+    `expected "onStartupFinished" in activationEvents; found: ${JSON.stringify(pkg.activationEvents)}`,
+  );
+  assert.ok(!pkg.activationEvents.includes('*'), 'expected no "*" activation event, which delays startup');
+});

@@ -69,6 +69,39 @@ export function isSectionClosed(section: SectionModel): boolean {
 }
 
 /**
+ * Whether any item still counts as unfinished under the Open filter's own
+ * admission rule (open, declined, unknown; done-unproven counts as done).
+ * This is the tree's default-expansion question (collapsed-tree-default):
+ * a branch opens only when it has something left to do.
+ *
+ * It is deliberately not `!isClosed(items)`: closedness reports false for
+ * zero items (there is no measured progress to close), and an empty
+ * container holds no unfinished work either, so it must not expand.
+ */
+function holdsUnfinishedWork(items: readonly ItemModel[]): boolean {
+  return items.some((item) => admits('open', item.derivedState));
+}
+
+/** True when `section` holds at least one unfinished item; false when it
+ * is closed or has no items. */
+export function sectionHoldsUnfinishedWork(section: SectionModel): boolean {
+  return holdsUnfinishedWork(section.items);
+}
+
+/** True when any section of `model` — progress-bearing or not, same scope
+ * as isFeatureClosed — holds an unfinished item; false when the feature
+ * is closed or has no items. */
+export function featureHoldsUnfinishedWork(model: FeatureModel): boolean {
+  return model.sections.some(sectionHoldsUnfinishedWork);
+}
+
+/** True when at least one of a project's features holds unfinished work;
+ * false when every feature is closed or empty, or there are none. */
+export function projectHoldsUnfinishedWork(models: readonly FeatureModel[]): boolean {
+  return models.some(featureHoldsUnfinishedWork);
+}
+
+/**
  * The three-way summary a group of items rolls up to, for the tree's and
  * detail panel's icon colouring (see src/domain/state-colors.ts):
  *

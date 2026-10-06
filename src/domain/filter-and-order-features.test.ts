@@ -11,10 +11,13 @@ import {
   deriveFeatureRollupState,
   deriveSectionRollupState,
   filterFeature,
+  featureHoldsUnfinishedWork,
   isFeatureClosed,
   isLedgerSortMode,
   isSectionClosed,
   orderFeatures,
+  projectHoldsUnfinishedWork,
+  sectionHoldsUnfinishedWork,
 } from './filter-and-order-features';
 
 function counts(overrides: Partial<ChecklistCounts> = {}): ChecklistCounts {
@@ -143,6 +146,61 @@ test('isSectionClosed is false when the section has an open item', () => {
 test('isSectionClosed is false for a section with zero items', () => {
   const s = section({ items: [] });
   assert.equal(isSectionClosed(s), false);
+});
+
+// --- *HoldsUnfinishedWork (collapsed-tree-default) ----------------------------
+
+for (const state of ['open', 'declined', 'unknown'] as const) {
+  test(`sectionHoldsUnfinishedWork is true when one item is ${state}, the same states the Open filter admits`, () => {
+    const s = section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: state })] });
+    assert.equal(sectionHoldsUnfinishedWork(s), true);
+  });
+}
+
+test('sectionHoldsUnfinishedWork is false when every item is done or done-unproven', () => {
+  const s = section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] });
+  assert.equal(sectionHoldsUnfinishedWork(s), false);
+});
+
+test('sectionHoldsUnfinishedWork is false for a section with zero items, unlike !isSectionClosed', () => {
+  const s = section({ items: [] });
+  assert.equal(sectionHoldsUnfinishedWork(s), false);
+  assert.equal(isSectionClosed(s), false);
+});
+
+test('featureHoldsUnfinishedWork is true when any section, progress-bearing or not, holds an open item', () => {
+  const model = feature({
+    sections: [
+      section({ heading: 'Tasks', items: [item({ id: 'T1', derivedState: 'done' })] }),
+      section({ heading: 'Acceptance criteria', kind: 'acceptance-criteria', countsTowardProgress: false, items: [item({ id: 'A1', derivedState: 'open' })] }),
+    ],
+  });
+  assert.equal(featureHoldsUnfinishedWork(model), true);
+});
+
+test('featureHoldsUnfinishedWork is false for a closed feature, matching isFeatureClosed', () => {
+  const model = feature({ sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] })] });
+  assert.equal(featureHoldsUnfinishedWork(model), false);
+  assert.equal(isFeatureClosed(model), true);
+});
+
+test('featureHoldsUnfinishedWork is false for a feature with zero items, unlike !isFeatureClosed', () => {
+  const model = feature({ sections: [] });
+  assert.equal(featureHoldsUnfinishedWork(model), false);
+  assert.equal(isFeatureClosed(model), false);
+});
+
+test('projectHoldsUnfinishedWork is true when at least one feature holds unfinished work', () => {
+  const closed = feature({ featureName: 'closed', sections: [section({ items: [item({ derivedState: 'done' })] })] });
+  const open = feature({ featureName: 'open', sections: [section({ items: [item({ derivedState: 'open' })] })] });
+  assert.equal(projectHoldsUnfinishedWork([closed, open]), true);
+});
+
+test('projectHoldsUnfinishedWork is false when every feature is closed or empty, and for no features', () => {
+  const closed = feature({ featureName: 'closed', sections: [section({ items: [item({ derivedState: 'done' })] })] });
+  const empty = feature({ featureName: 'empty', sections: [] });
+  assert.equal(projectHoldsUnfinishedWork([closed, empty]), false);
+  assert.equal(projectHoldsUnfinishedWork([]), false);
 });
 
 // --- deriveSectionRollupState / deriveFeatureRollupState ---------------------

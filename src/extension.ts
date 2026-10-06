@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { FeatureDetailPanel } from './adapter/feature-detail-panel';
+import { UpdateBadge } from './adapter/update-badge';
 import { FeatureDocumentWatcher } from './adapter/feature-document-watcher';
 import type { FeatureNode, TaskNode } from './adapter/feature-tree-provider';
 import { FeatureTreeDataProvider } from './adapter/feature-tree-provider';
@@ -37,6 +38,21 @@ export function activate(context: vscode.ExtensionContext): void {
     treeDataProvider: provider,
   });
   context.subscriptions.push(treeView);
+
+  const updateBadge = new UpdateBadge(
+    treeView,
+    {
+      focused: vscode.window.state.focused,
+      onDidChangeFocus: (listener) =>
+        vscode.window.onDidChangeWindowState((state) => listener(state.focused)),
+    },
+    {
+      visible: treeView.visible,
+      onDidChangeVisibility: (listener) =>
+        treeView.onDidChangeVisibility((event) => listener(event.visible)),
+    },
+  );
+  context.subscriptions.push(updateBadge);
 
   const refreshCommand = vscode.commands.registerCommand('oddLedger.refresh', () => {
     provider.refresh();
@@ -120,14 +136,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const documentWatcher = new FeatureDocumentWatcher(({ touchedPaths }) => {
     provider.refresh();
     void refreshOpenPanelIfTouched(detailPanel, touchedPaths);
+    updateBadge.recordBatch(touchedPaths);
   });
   context.subscriptions.push(documentWatcher);
 }
 
 export function deactivate(): void {
-  // Everything activate() created (the tree view, the detail panel
-  // manager, the refresh command, openFeature, openTask, the three filter
-  // commands, selectSortMode, and the document watcher) is a disposable
+  // Everything activate() created (the tree view, its focus- and visibility-aware badge,
+  // the detail panel manager, the refresh command, openFeature, openTask,
+  // the three filter commands, selectSortMode, and the document watcher) is a disposable
   // pushed to context.subscriptions, so VS Code tears it down on its own.
   // Nothing else was allocated, so there is nothing to do here.
 }

@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.3.4
+
+The Features tree now opens on what is left to do.
+
+- A section, feature or project node starts expanded only while it still holds unfinished work: an item that is open, declined or unknown, the same items the `Open` filter shows. Everything else starts collapsed, including a feature with no checklist items at all, and can still be expanded by hand.
+- This changes expansion only. An expanded branch still lists every task, finished ones included, and the `All` / `Open` / `Unproven` filters, sort modes and detail panel are unchanged.
+- The computed state applies to nodes the view has not shown before. A refresh, manual or from a document change, keeps any node the view already knows in whatever state you left it.
+
+## 1.3.3
+
+The activity-bar badge now works without opening the Features view first.
+
+- The extension now activates in the background once VS Code has finished starting (`onStartupFinished`). Previously it activated only when the Features view first became visible in a window, so until then nothing watched `odd/tasks/*.md` and no badge could appear.
+- Startup is not delayed: activation waits until VS Code has finished starting. The badge counting and clearing rules from 1.3.2 are unchanged.
+
+## 1.3.2
+
+The activity-bar badge for automatic task-document changes now clears when you actually see the Features view, not when the window regains focus.
+
+- The badge counts distinct task documents changed, created or deleted under `odd/tasks/*.md` while the window is unfocused, the Features view is hidden, or both. It clears only once the window is focused **and** the view is visible, so refocusing with the view hidden keeps the badge until you open the view.
+- Changes that arrive while you can already see the view never create a badge. The 1.3.1 counting is unchanged: repeated saves of one document count once, and manual refreshes and workspace-folder-only refreshes do not count.
+- The badge tooltip now reads "changed since you last saw this view".
+
+## 1.3.1
+
+Adds a native activity-bar badge for automatic task-document changes received while the VS Code window is unfocused.
+
+- The badge counts distinct task documents changed, created or deleted under `odd/tasks/*.md` and clears when the window regains focus. VS Code's active theme controls its appearance.
+- Manual refreshes and workspace-folder-only refreshes do not count. The multi-root project grouping introduced in 1.3.0 and all existing 1.3.0 behavior are preserved.
+
 ## 1.3.0
 
 In a multi-root workspace the tree now tells projects apart.
