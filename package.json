@@ -3,7 +3,7 @@
   "displayName": "ODD Ledger",
   "description": "Read-only ledger for Organic Driven Development (ODD): a sidebar tree and detail panel over a project's odd/ folder.",
   "icon": "resources/icon.png",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "publisher": "jorgealonsodev",
   "repository": {
     "type": "git",
@@ -35,7 +35,9 @@
     "tree view"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,

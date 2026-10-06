@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.3
+
+The activity-bar badge now works without opening the Features view first.
+
+- The extension now activates in the background once VS Code has finished starting (`onStartupFinished`). Previously it activated only when the Features view first became visible in a window, so until then nothing watched `odd/tasks/*.md` and no badge could appear.
+- Startup is not delayed: activation waits until VS Code has finished starting. The badge counting and clearing rules from 1.3.2 are unchanged.
+
 ## 1.3.2
 
 The activity-bar badge for automatic task-document changes now clears when you actually see the Features view, not when the window regains focus.
