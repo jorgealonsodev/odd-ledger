@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.4
+
+The Features tree now opens on what is left to do.
+
+- A section, feature or project node starts expanded only while it still holds unfinished work: an item that is open, declined or unknown, the same items the `Open` filter shows. Everything else starts collapsed, including a feature with no checklist items at all, and can still be expanded by hand.
+- This changes expansion only. An expanded branch still lists every task, finished ones included, and the `All` / `Open` / `Unproven` filters, sort modes and detail panel are unchanged.
+- The computed state applies to nodes the view has not shown before. A refresh, manual or from a document change, keeps any node the view already knows in whatever state you left it.
+
 ## 1.3.3
 
 The activity-bar badge now works without opening the Features view first.

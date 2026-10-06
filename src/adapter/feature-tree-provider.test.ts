@@ -121,12 +121,103 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
 
   // --- FeatureNode -------------------------------------------------------
 
-  test('a feature node shows its name, done/total, and is expanded by default', () => {
+  test('a feature node shows its name and done/total', () => {
     const node = new FeatureNode(feature({ featureName: 'sample-feature' }));
     assert.equal(node.label, 'sample-feature');
     assert.equal(node.description, '1/2');
-    assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
     assert.equal(node.contextValue, 'oddLedger.feature');
+  });
+
+  // --- default expansion (collapsed-tree-default) ----------------------------
+
+  test('a feature whose items are all finished renders collapsed, not as a leaf', () => {
+    const node = new FeatureNode(
+      feature({ sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] })] }),
+    );
+    assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+  });
+
+  test('a feature holding one open task among finished ones renders expanded', () => {
+    const node = new FeatureNode(
+      feature({
+        sections: [
+          section({ heading: 'Done', items: [item({ id: 'T1', derivedState: 'done' })] }),
+          section({ heading: 'Tasks', items: [item({ id: 'T2', derivedState: 'done' }), item({ id: 'T3', derivedState: 'open' })] }),
+        ],
+      }),
+    );
+    assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+  });
+
+  for (const state of ['declined', 'unknown'] as const) {
+    test(`a feature whose only unfinished item is ${state} renders expanded, same as the Open filter admits it`, () => {
+      const node = new FeatureNode(
+        feature({ sections: [section({ items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: state })] })] }),
+      );
+      assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+    });
+  }
+
+  test('a feature with no items at all renders collapsed rather than expanded', () => {
+    const node = new FeatureNode(feature({ sections: [], nextStep: nextStep() }));
+    assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+  });
+
+  test('a finished section stays collapsed inside an expanded feature, while its open sibling expands', () => {
+    const provider = new FeatureTreeDataProvider();
+    const featureNode = new FeatureNode(
+      feature({
+        sections: [
+          section({ heading: 'Done', items: [item({ id: 'T1', derivedState: 'done' }), item({ id: 'T2', derivedState: 'done-unproven' })] }),
+          section({ heading: 'Tasks', items: [item({ id: 'T3', derivedState: 'open' })] }),
+        ],
+      }),
+    );
+    assert.equal(featureNode.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+
+    const [closedSection, openSection] = provider.getChildren(featureNode) as SectionNode[];
+    assert.equal(closedSection.label, 'Done');
+    assert.equal(closedSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+    assert.equal(openSection.label, 'Tasks');
+    assert.equal(openSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+  });
+
+  test('a section with no items renders collapsed', () => {
+    const node = new SectionNode(section({ items: [] }), new FeatureNode(feature()));
+    assert.equal(node.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+  });
+
+  test('an expanded branch still lists every task, finished ones included, and every section', () => {
+    const provider = new FeatureTreeDataProvider();
+    const featureNode = new FeatureNode(
+      feature({
+        sections: [
+          section({ heading: 'Done', items: [item({ id: 'T1', derivedState: 'done' })] }),
+          section({
+            heading: 'Tasks',
+            items: [
+              item({ id: 'T2', derivedState: 'done' }),
+              item({ id: 'T3', derivedState: 'open' }),
+              item({ id: 'T4', derivedState: 'done-unproven' }),
+            ],
+          }),
+        ],
+        nextStep: nextStep(),
+      }),
+    );
+    const children = provider.getChildren(featureNode);
+    assert.deepEqual(children.map((c) => c.label), ['Done', 'Tasks', 'Next: Ship the remaining task.']);
+
+    const openSection = children[1] as SectionNode;
+    assert.equal(openSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+    assert.deepEqual(
+      provider.getChildren(openSection).map((t) => t.label),
+      ['T2 Do the thing', 'T3 Do the thing', 'T4 Do the thing'],
+    );
+    assert.deepEqual(
+      provider.getChildren(children[0]).map((t) => t.label),
+      ['T1 Do the thing'],
+    );
   });
 
   test('a feature node appends an unproven badge only when doneUnproven is non-zero', () => {
@@ -179,7 +270,7 @@ suite('FeatureTreeDataProvider — no workspace folder', () => {
 
   // --- SectionNode ---------------------------------------------------------
 
-  test('a section node shows its heading as written and its own done/total', () => {
+  test('a section node shows its heading as written and its own done/total, expanded while it holds an open item', () => {
     const parent = new FeatureNode(feature());
     const node = new SectionNode(
       section({ heading: 'Acceptance criteria', kind: null, items: [item({ id: 'T1', derivedState: 'open' })], counts: { done: 1, total: 3, percentage: 33, doneUnproven: 0 } }),
@@ -721,7 +812,7 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     assert.equal(projectB.description, '1/4');
   });
 
-  test('a project node is expanded, uses the root-folder icon, has no command and a path tooltip', () => {
+  test('a project node holding an open feature is expanded, uses the root-folder icon, has no command and a path tooltip', () => {
     const a = makeFolder('alpha-app', { 'a-one': documentText('a-one', 1, 2) });
     const b = makeFolder('beta-api', { 'b-one': documentText('b-one', 1, 2) });
     const [project] = providerFor([a, b]).getChildren() as ProjectNode[];
@@ -735,6 +826,28 @@ suite('FeatureTreeDataProvider — multi-root workspace grouping', () => {
     assert.ok(tooltip instanceof vscode.MarkdownString);
     assert.equal(tooltip.isTrusted, false);
     assert.ok(tooltip.value.includes('odd-ledger-multi-'), `tooltip should carry the folder path: ${tooltip.value}`);
+  });
+
+  test('a project node expands only when at least one of its features still holds unfinished work', () => {
+    const a = makeFolder('alpha-app', { 'a-closed': documentText('a-closed', 2, 2), 'a-open': documentText('a-open', 1, 2) });
+    const b = makeFolder('beta-api', { 'b-closed': documentText('b-closed', 1, 1), 'b-unproven': documentText('b-unproven', 1, 1, 1) });
+    const provider = providerFor([a, b]);
+    const [projectA, projectB] = provider.getChildren() as ProjectNode[];
+
+    assert.equal(projectA.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+    assert.equal(projectB.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+
+    // Collapsed is expansion state only: every feature is still a child.
+    const stateByName = (project: ProjectNode) =>
+      (provider.getChildren(project) as FeatureNode[]).map((f) => [f.model.featureName, f.collapsibleState]);
+    assert.deepEqual(stateByName(projectA), [
+      ['a-closed', vscode.TreeItemCollapsibleState.Collapsed],
+      ['a-open', vscode.TreeItemCollapsibleState.Expanded],
+    ]);
+    assert.deepEqual(stateByName(projectB), [
+      ['b-closed', vscode.TreeItemCollapsibleState.Collapsed],
+      ['b-unproven', vscode.TreeItemCollapsibleState.Collapsed],
+    ]);
   });
 
   test('a folder with no visible feature shows no project node', () => {

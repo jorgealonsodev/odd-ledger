@@ -27,8 +27,11 @@ import type { DiscoveredFeatureDocument } from '../domain/discover-feature-docum
 import {
   deriveFeatureRollupState,
   deriveSectionRollupState,
+  featureHoldsUnfinishedWork,
   filterFeature,
   orderFeatures,
+  projectHoldsUnfinishedWork,
+  sectionHoldsUnfinishedWork,
 } from '../domain/filter-and-order-features';
 import type { LedgerFilter, LedgerSortMode, RollupState } from '../domain/filter-and-order-features';
 import type { FetchCreationDate } from '../domain/feature-creation-date-cache';
@@ -137,6 +140,19 @@ function rollupThemeIcon(rollup: RollupState, fallbackIconId: string): vscode.Th
 }
 
 /**
+ * The initial expansion of a project, feature or section node
+ * (collapsed-tree-default): expanded only while it holds unfinished work,
+ * so what is left to do is what the tree shows first. Everything else is
+ * `Collapsed`, never `None`, so a finished branch can still be opened by
+ * hand. VS Code applies this only to a node it has not rendered before:
+ * nodes carry no `id`, so their identity is their label under their
+ * parent, and a refresh keeps whatever state the user left a known node in.
+ */
+function defaultCollapsibleState(holdsUnfinishedWork: boolean): vscode.TreeItemCollapsibleState {
+  return holdsUnfinishedWork ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.Collapsed;
+}
+
+/**
  * One workspace folder ("project") in a multi-root workspace: the root
  * node that groups that folder's features, so features from different
  * projects are never mixed in one flat list. It exists only when the
@@ -157,7 +173,7 @@ export class ProjectNode extends vscode.TreeItem {
     public readonly folderPath: string,
     public readonly group: ProjectGroup,
   ) {
-    super(folderName, vscode.TreeItemCollapsibleState.Expanded);
+    super(folderName, defaultCollapsibleState(projectHoldsUnfinishedWork(group.models)));
     this.description = formatCountsDescription(group.progress);
     // `appendText` escapes the path: it is environment-controlled text this
     // extension does not author. isTrusted stays off, like every tooltip
@@ -187,7 +203,7 @@ export class FeatureNode extends vscode.TreeItem {
     public readonly model: FeatureModel,
     public readonly parent: ProjectNode | undefined = undefined,
   ) {
-    super(model.featureName, vscode.TreeItemCollapsibleState.Expanded);
+    super(model.featureName, defaultCollapsibleState(featureHoldsUnfinishedWork(model)));
     this.description = formatFeatureDescription(model);
     this.tooltip = formatFeatureTooltip(model);
     // A feature whose items are all closed and all proven reads green,
@@ -235,7 +251,7 @@ export class SectionNode extends vscode.TreeItem {
     public readonly model: SectionModel,
     public readonly parent: FeatureNode,
   ) {
-    super(model.heading, vscode.TreeItemCollapsibleState.Expanded);
+    super(model.heading, defaultCollapsibleState(sectionHoldsUnfinishedWork(model)));
     this.description = `${model.counts.done}/${model.counts.total}`;
     this.tooltip = formatSectionTooltip(model);
     // Same rollup rule as FeatureNode, one level down: a section whose
